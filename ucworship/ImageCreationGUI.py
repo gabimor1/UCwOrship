@@ -2,13 +2,11 @@ import re
 import os
 import tkinter as tk
 from tkinter import ttk, filedialog
-from PIL import Image, ImageDraw, ImageFont, ImageTk
-import arabic_reshaper
-from bidi.algorithm import get_display
+from PIL import Image, ImageTk
 
 # This line IMPORTS your perfected image creation function from your script.
 # Make sure 'image_automation_script.py' is in the same folder.
-from image_automation_script import create_arabic_song_image
+from ucworship.image_automation_script import create_arabic_song_image
 
 # --- 1. Music Theory Engine ---
 # This class handles all chord transpositions for scale and capo adjustments.
@@ -196,14 +194,14 @@ class SongSheetApp(tk.Tk):
     def load_media_files(self):
         self.all_media_files = []
         try:
-            txt_dir = "txt_files"
+            txt_dir = "assets/txt_files"
             self.all_media_files.extend(sorted([f for f in os.listdir(txt_dir) if f.endswith('.txt')]))
         except FileNotFoundError: print("'txt_files' directory not found.")
         try:
             img_dir = "image_files"
             self.all_media_files.extend(sorted([f for f in os.listdir(img_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif'))]))
         except FileNotFoundError: print("'image_files' directory not found.")
-        
+
         self._update_listbox(self.media_listbox, self.all_media_files)
 
     def _update_listbox(self, listbox, file_list):
@@ -242,11 +240,11 @@ class SongSheetApp(tk.Tk):
     def on_media_select(self, event):
         self._clear_other_selections(self.media_listbox)
         self._process_selection(self.media_listbox)
-        
+
     def on_session_item_select(self, event):
         self._clear_other_selections(self.session_listbox)
         self._process_selection(self.session_listbox)
-        
+
     def _clear_other_selections(self, current_listbox):
         if current_listbox != self.media_listbox: self.media_listbox.selection_clear(0, tk.END)
         if current_listbox != self.session_listbox: self.session_listbox.selection_clear(0, tk.END)
@@ -254,14 +252,14 @@ class SongSheetApp(tk.Tk):
     def _process_selection(self, listbox):
         selection_indices = listbox.curselection()
         if not selection_indices: return
-        
+
         selected_file = listbox.get(selection_indices[0])
         self.current_media_name = os.path.splitext(selected_file)[0]
-        
+
         if selected_file.lower().endswith('.txt'):
             self.current_mode = 'song'
             self._toggle_controls('normal')
-            self.current_file_path = os.path.join("txt_files", selected_file)
+            self.current_file_path = os.path.join("assets", "txt_files", selected_file)
             self._parse_song_file(self.current_file_path)
             self.params['scale_steps'].set(0)
             self.update_image()
@@ -275,7 +273,7 @@ class SongSheetApp(tk.Tk):
             except Exception as e:
                 print(f"Error opening image {self.current_file_path}: {e}")
                 self.pil_image = None; self.image_canvas.delete("all")
-    
+
     def on_capo_change(self, direction):
         self.params['capo'].set(self.params['capo'].get() + direction)
         self.update_image()
@@ -456,7 +454,7 @@ class SongSheetApp(tk.Tk):
         canvas_w, canvas_h = self.image_canvas.winfo_width(), self.image_canvas.winfo_height()
         offset_x = (canvas_w - disp_w) / 2
         offset_y = (canvas_h - disp_h) / 2
-        
+
         img_x1 = x1 - offset_x
         img_y1 = y1 - offset_y
         
@@ -469,9 +467,5 @@ class SongSheetApp(tk.Tk):
         
         self.pil_image_zoomed = self.pil_image.crop((crop_x1, crop_y1, crop_x2, crop_y2))
         self.is_zoomed = True
-        
-        self._update_projector_view()
 
-if __name__ == "__main__":
-    app = SongSheetApp()
-    app.mainloop()
+        self._update_projector_view()
