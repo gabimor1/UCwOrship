@@ -49,9 +49,10 @@ class SongSheetApp(tk.Tk):
         self.geometry("1200x800")
 
         # --- Initialize State & Parameters ---
-        self.all_song_files = [] # Full list of songs
+        self.all_media_files = [] # A single list for all songs and images
+        self.current_mode = 'song' # Can be 'song' or 'image'
         self.current_song_data = None
-        self.current_song_name = ""
+        self.current_media_name = ""
         self.current_file_path = ""
         self.pil_image = None # To hold the original, full-resolution PIL image
         self.pil_image_zoomed = None # To hold the currently zoomed image for the projector
@@ -89,7 +90,7 @@ class SongSheetApp(tk.Tk):
         self.grid_rowconfigure(0, weight=1)
         self._create_controls_panel()
         self._create_image_panel()
-        self.load_song_files()
+        self.load_media_files()
 
     def _create_controls_panel(self):
         controls_frame = ttk.Frame(self, padding="10")
@@ -97,63 +98,80 @@ class SongSheetApp(tk.Tk):
         controls_frame.grid_rowconfigure(0, weight=1) # Allow paned window to expand
         controls_frame.grid_columnconfigure(0, weight=1)
 
-        paned_window = ttk.PanedWindow(controls_frame, orient=tk.VERTICAL)
-        paned_window.grid(row=0, column=0, sticky="nsew")
+        # --- Main Paned Window for resizable lists ---
+        main_paned_window = ttk.PanedWindow(controls_frame, orient=tk.VERTICAL)
+        main_paned_window.grid(row=0, column=0, sticky="nsew")
 
-        all_songs_frame = ttk.Frame(paned_window, padding=5)
-        paned_window.add(all_songs_frame, weight=1)
-        all_songs_frame.grid_columnconfigure(0, weight=1)
-        all_songs_frame.grid_rowconfigure(2, weight=1)
+        # --- Top Pane: Unified Media Browser ---
+        browser_pane = ttk.Frame(main_paned_window, padding=5)
+        main_paned_window.add(browser_pane, weight=1)
+        self._populate_media_browser(browser_pane)
+
+        # --- Bottom Pane: Session List ---
+        session_pane = ttk.Frame(main_paned_window, padding=5)
+        main_paned_window.add(session_pane, weight=1)
+        self._populate_session_list(session_pane)
+
+        # --- Parameter Controls at the very bottom ---
+        self.parameter_controls_frame = ttk.Frame(controls_frame)
+        self.parameter_controls_frame.grid(row=1, column=0, sticky="ew")
+        self._populate_parameter_controls()
         
-        ttk.Label(all_songs_frame, text="All Songs", font=("Helvetica", 14, "bold")).grid(row=0, column=0, columnspan=2, pady=5)
+    def _populate_media_browser(self, parent_frame):
+        parent_frame.grid_rowconfigure(2, weight=1)
+        parent_frame.grid_columnconfigure(0, weight=1)
+        ttk.Label(parent_frame, text="Media Library", font=("Helvetica", 12, "bold")).grid(row=0, column=0, pady=5)
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", self._on_search)
-        search_entry = ttk.Entry(all_songs_frame, textvariable=self.search_var)
-        search_entry.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
-        
-        self.song_listbox = tk.Listbox(all_songs_frame, exportselection=False)
-        self.song_listbox.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
-        self.song_listbox.bind("<<ListboxSelect>>", lambda e: self.on_song_select(e, 'main'))
-        
-        add_button = ttk.Button(all_songs_frame, text="Add to Session List ↓", command=self._add_to_session)
-        add_button.grid(row=3, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        search_entry = ttk.Entry(parent_frame, textvariable=self.search_var)
+        search_entry.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+        self.media_listbox = tk.Listbox(parent_frame, exportselection=False)
+        self.media_listbox.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
+        self.media_listbox.bind("<<ListboxSelect>>", self.on_media_select)
+        add_button = ttk.Button(parent_frame, text="Add to Session List ↓", command=self._add_to_session)
+        add_button.grid(row=3, column=0, sticky="ew", padx=5, pady=5)
 
-        session_list_frame = ttk.Frame(paned_window, padding=5)
-        paned_window.add(session_list_frame, weight=1)
-        session_list_frame.grid_columnconfigure(0, weight=1)
-        session_list_frame.grid_rowconfigure(1, weight=1)
-
-        ttk.Label(session_list_frame, text="Session List", font=("Helvetica", 14, "bold")).grid(row=0, column=0, columnspan=2, pady=5)
-        self.session_listbox = tk.Listbox(session_list_frame, exportselection=False)
+    def _populate_session_list(self, parent_frame):
+        parent_frame.grid_columnconfigure(0, weight=1)
+        parent_frame.grid_rowconfigure(1, weight=1)
+        ttk.Label(parent_frame, text="Session List", font=("Helvetica", 12, "bold")).grid(row=0, column=0, columnspan=2, pady=5)
+        self.session_listbox = tk.Listbox(parent_frame, exportselection=False)
         self.session_listbox.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
-        self.session_listbox.bind("<<ListboxSelect>>", lambda e: self.on_song_select(e, 'session'))
-
-        session_buttons_frame = ttk.Frame(session_list_frame)
+        self.session_listbox.bind("<<ListboxSelect>>", self.on_session_item_select)
+        session_buttons_frame = ttk.Frame(parent_frame)
         session_buttons_frame.grid(row=2, column=0, columnspan=2, sticky="ew")
         session_buttons_frame.grid_columnconfigure(0, weight=1); session_buttons_frame.grid_columnconfigure(1, weight=1); session_buttons_frame.grid_columnconfigure(2, weight=1)
         ttk.Button(session_buttons_frame, text="▲", command=lambda: self._move_in_session(-1)).grid(row=0, column=0, sticky="ew")
         ttk.Button(session_buttons_frame, text="▼", command=lambda: self._move_in_session(1)).grid(row=0, column=1, sticky="ew")
         ttk.Button(session_buttons_frame, text="Remove", command=self._remove_from_session).grid(row=0, column=2, sticky="ew")
 
-        bottom_controls_frame = ttk.Frame(controls_frame)
-        bottom_controls_frame.grid(row=1, column=0, sticky="ew")
-        
-        ttk.Separator(bottom_controls_frame, orient='horizontal').pack(fill='x', pady=15)
-        ttk.Label(bottom_controls_frame, text="Controls", font=("Helvetica", 14, "bold")).pack(pady=5)
-        self._create_slider(bottom_controls_frame, "Lyrics Font Size", self.params['lyric_font_size'], 10, 80)
-        self._create_slider(bottom_controls_frame, "Chords Font Size", self.params['chord_font_size'], 8, 50)
-        ttk.Checkbutton(bottom_controls_frame, text="Show Chords", variable=self.params['show_chords'], command=self.update_image).pack(pady=10)
-        ttk.Separator(bottom_controls_frame, orient='horizontal').pack(fill='x', pady=15)
-        self._create_stepper(bottom_controls_frame, "Capo", self.params['capo'], self.on_capo_change)
-        self._create_stepper(bottom_controls_frame, "Scale", self.params['scale_steps'], self.on_scale_change)
-        
-        ttk.Separator(bottom_controls_frame, orient='horizontal').pack(fill='x', pady=15)
-        action_frame = ttk.Frame(bottom_controls_frame)
+    def _populate_parameter_controls(self):
+        ttk.Separator(self.parameter_controls_frame, orient='horizontal').pack(fill='x', pady=15)
+        ttk.Label(self.parameter_controls_frame, text="Controls", font=("Helvetica", 14, "bold")).pack(pady=5)
+        self._create_slider(self.parameter_controls_frame, "Lyrics Font Size", self.params['lyric_font_size'], 10, 80)
+        self._create_slider(self.parameter_controls_frame, "Chords Font Size", self.params['chord_font_size'], 8, 50)
+        ttk.Checkbutton(self.parameter_controls_frame, text="Show Chords", variable=self.params['show_chords'], command=self.update_image).pack(pady=10)
+        ttk.Separator(self.parameter_controls_frame, orient='horizontal').pack(fill='x', pady=15)
+        self._create_stepper(self.parameter_controls_frame, "Capo", self.params['capo'], self.on_capo_change)
+        self._create_stepper(self.parameter_controls_frame, "Scale", self.params['scale_steps'], self.on_scale_change)
+        ttk.Separator(self.parameter_controls_frame, orient='horizontal').pack(fill='x', pady=15)
+        action_frame = ttk.Frame(self.parameter_controls_frame)
         action_frame.pack(fill='x', pady=5)
-        
-        ttk.Button(action_frame, text="Set as Default", command=self.set_as_default).pack(side="left", expand=True, fill='x', padx=2, ipady=5)
+        self.set_default_button = ttk.Button(action_frame, text="Set as Default", command=self.set_as_default)
+        self.set_default_button.pack(side="left", expand=True, fill='x', padx=2, ipady=5)
         ttk.Button(action_frame, text="Export as PNG", command=self.export_image).pack(side="left", expand=True, fill='x', padx=2, ipady=5)
         ttk.Button(action_frame, text="Open Projector", command=self.open_projector_window).pack(side="left", expand=True, fill='x', padx=2, ipady=5)
+
+    def _toggle_controls(self, state):
+        widget_state = [state] if state == 'disabled' else ['!disabled']
+        for child in self.parameter_controls_frame.winfo_children():
+            if hasattr(child, 'state'):
+                if child != self.set_default_button:
+                    child.state(widget_state)
+            if isinstance(child, (ttk.Frame)):
+                 for sub_child in child.winfo_children():
+                    if hasattr(sub_child, 'state'): sub_child.state(widget_state)
+        self.set_default_button.state(['!disabled'] if self.current_mode == 'song' else ['disabled'])
 
     def _create_slider(self, parent, label_text, variable, from_, to):
         frame = ttk.Frame(parent); frame.pack(fill='x', pady=5)
@@ -170,36 +188,41 @@ class SongSheetApp(tk.Tk):
     def _create_image_panel(self):
         self.image_canvas = tk.Canvas(self, bg="gray")
         self.image_canvas.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
-        # Bind events for zoom functionality
         self.image_canvas.bind("<ButtonPress-1>", self._start_zoom)
         self.image_canvas.bind("<B1-Motion>", self._drag_zoom)
         self.image_canvas.bind("<ButtonRelease-1>", self._end_zoom)
-        self.image_canvas.bind("<Double-Button-1>", self._reset_zoom) # New event for resetting zoom
+        self.image_canvas.bind("<Double-Button-1>", self._reset_zoom)
 
-    def load_song_files(self):
+    def load_media_files(self):
+        self.all_media_files = []
         try:
             txt_dir = "txt_files"
-            self.all_song_files = sorted([f for f in os.listdir(txt_dir) if f.endswith('.txt')])
-            self._update_main_listbox(self.all_song_files)
-        except FileNotFoundError: self.song_listbox.insert(tk.END, "'txt_files' directory not found.")
+            self.all_media_files.extend(sorted([f for f in os.listdir(txt_dir) if f.endswith('.txt')]))
+        except FileNotFoundError: print("'txt_files' directory not found.")
+        try:
+            img_dir = "image_files"
+            self.all_media_files.extend(sorted([f for f in os.listdir(img_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif'))]))
+        except FileNotFoundError: print("'image_files' directory not found.")
+        
+        self._update_listbox(self.media_listbox, self.all_media_files)
 
-    def _update_main_listbox(self, file_list):
-        self.song_listbox.delete(0, tk.END)
-        for song in file_list: self.song_listbox.insert(tk.END, song)
+    def _update_listbox(self, listbox, file_list):
+        listbox.delete(0, tk.END)
+        for item in file_list: listbox.insert(tk.END, item)
 
     def _on_search(self, *args):
         search_term = self.search_var.get().lower()
-        if not search_term: self._update_main_listbox(self.all_song_files)
+        if not search_term: self._update_listbox(self.media_listbox, self.all_media_files)
         else:
-            filtered_files = [f for f in self.all_song_files if search_term in f.lower()]
-            self._update_main_listbox(filtered_files)
+            filtered = [f for f in self.all_media_files if search_term in f.lower()]
+            self._update_listbox(self.media_listbox, filtered)
 
     def _add_to_session(self):
-        selection_indices = self.song_listbox.curselection()
+        selection_indices = self.media_listbox.curselection()
         if not selection_indices: return
-        selected_song = self.song_listbox.get(selection_indices[0])
-        if selected_song not in self.session_listbox.get(0, tk.END):
-            self.session_listbox.insert(tk.END, selected_song)
+        selected_item = self.media_listbox.get(selection_indices[0])
+        if selected_item not in self.session_listbox.get(0, tk.END):
+            self.session_listbox.insert(tk.END, selected_item)
 
     def _remove_from_session(self):
         selection_indices = self.session_listbox.curselection()
@@ -211,26 +234,118 @@ class SongSheetApp(tk.Tk):
         if not selection_indices: return
         idx = selection_indices[0]; new_idx = idx + direction
         if 0 <= new_idx < self.session_listbox.size():
-            song = self.session_listbox.get(idx)
+            item = self.session_listbox.get(idx)
             self.session_listbox.delete(idx)
-            self.session_listbox.insert(new_idx, song)
+            self.session_listbox.insert(new_idx, item)
             self.session_listbox.selection_set(new_idx)
 
-    def on_song_select(self, event, list_type):
-        if list_type == 'main':
-            self.session_listbox.selection_clear(0, tk.END)
-            source_listbox = self.song_listbox
-        else:
-            self.song_listbox.selection_clear(0, tk.END)
-            source_listbox = self.session_listbox
-        selection_indices = source_listbox.curselection()
+    def on_media_select(self, event):
+        self._clear_other_selections(self.media_listbox)
+        self._process_selection(self.media_listbox)
+        
+    def on_session_item_select(self, event):
+        self._clear_other_selections(self.session_listbox)
+        self._process_selection(self.session_listbox)
+        
+    def _clear_other_selections(self, current_listbox):
+        if current_listbox != self.media_listbox: self.media_listbox.selection_clear(0, tk.END)
+        if current_listbox != self.session_listbox: self.session_listbox.selection_clear(0, tk.END)
+
+    def _process_selection(self, listbox):
+        selection_indices = listbox.curselection()
         if not selection_indices: return
-        selected_file = source_listbox.get(selection_indices[0])
-        self.current_song_name = os.path.splitext(selected_file)[0]
-        self.current_file_path = os.path.join("txt_files", selected_file)
-        self._parse_song_file(self.current_file_path)
-        self.params['scale_steps'].set(0)
+        
+        selected_file = listbox.get(selection_indices[0])
+        self.current_media_name = os.path.splitext(selected_file)[0]
+        
+        if selected_file.lower().endswith('.txt'):
+            self.current_mode = 'song'
+            self._toggle_controls('normal')
+            self.current_file_path = os.path.join("txt_files", selected_file)
+            self._parse_song_file(self.current_file_path)
+            self.params['scale_steps'].set(0)
+            self.update_image()
+        else:
+            self.current_mode = 'image'
+            self._toggle_controls('disabled')
+            self.current_file_path = os.path.join("image_files", selected_file)
+            try:
+                self.pil_image = Image.open(self.current_file_path)
+                self.update_image(is_static_image=True)
+            except Exception as e:
+                print(f"Error opening image {self.current_file_path}: {e}")
+                self.pil_image = None; self.image_canvas.delete("all")
+    
+    def on_capo_change(self, direction):
+        self.params['capo'].set(self.params['capo'].get() + direction)
         self.update_image()
+        
+    def on_scale_change(self, direction):
+        self.params['scale_steps'].set(self.params['scale_steps'].get() + direction)
+        self.update_image()
+
+    def update_image(self, is_static_image=False):
+        if is_static_image:
+            if not self.pil_image: return
+            self.is_zoomed = False
+        else: # Is a song
+            if not self.current_song_data: return
+            self.is_zoomed = False
+            gui_params = {key: var.get() if isinstance(var, (tk.IntVar, tk.BooleanVar)) else var for key, var in self.params.items()}
+            gui_params['transpose_steps'] = gui_params['scale_steps'] - gui_params['capo']
+            song_data_for_render = self._get_transposed_song_data(gui_params)
+            self.pil_image = create_arabic_song_image(song_data_for_render, gui_params)
+            if not self.pil_image: return
+
+        self._display_on_canvas(self.pil_image, self.image_canvas)
+        self._update_projector_view()
+
+    def _display_on_canvas(self, pil_img, canvas_widget):
+        self.after(50, lambda: self._display_on_canvas_after_delay(pil_img, canvas_widget))
+
+    def _display_on_canvas_after_delay(self, pil_img, canvas_widget):
+        if not (canvas_widget and canvas_widget.winfo_exists()): return
+        canvas_width = canvas_widget.winfo_width()
+        canvas_height = canvas_widget.winfo_height()
+        if canvas_width < 2 or canvas_height < 2: return
+
+        img_copy = pil_img.copy()
+        try: resample_filter = Image.Resampling.LANCZOS
+        except AttributeError: resample_filter = Image.LANCZOS
+
+        if canvas_widget == self.projector_label:
+            img_w, img_h = img_copy.size
+            ratio = min(canvas_width / img_w, canvas_height / img_h)
+            new_w, new_h = int(img_w * ratio), int(img_h * ratio)
+            img_copy = img_copy.resize((new_w, new_h), resample_filter)
+        else:
+            img_copy.thumbnail((canvas_width, canvas_height), resample_filter)
+        
+        tk_img = ImageTk.PhotoImage(img_copy)
+        canvas_widget.delete("all")
+        canvas_widget.create_image(canvas_width / 2, canvas_height / 2, image=tk_img, anchor="center")
+        canvas_widget.image = tk_img
+
+    def _update_projector_view(self):
+        if not (self.projector_window and self.projector_window.winfo_exists()): return
+        image_to_show = self.pil_image_zoomed if self.is_zoomed else self.pil_image
+        if image_to_show: self._display_on_canvas(image_to_show, self.projector_label)
+
+    def _get_transposed_song_data(self, gui_params):
+        song_data_for_render = []
+        for section in self.current_song_data:
+            if section['type'] != 'lyrics_section':
+                song_data_for_render.append(section)
+            else:
+                new_section = {'type': 'lyrics_section', 'title': section['title'], 'lines': []}
+                for line_info in section['lines']:
+                    transposed_line = line_info['line']
+                    transposed_chords = [MusicTheory.transpose_chord(c, gui_params['transpose_steps']) for c in line_info['chords']]
+                    for original, transposed in zip(line_info['chords'], transposed_chords):
+                        transposed_line = transposed_line.replace(f"[{original}]", f"[{transposed}]", 1)
+                    new_section['lines'].append(transposed_line)
+                song_data_for_render.append(new_section)
+        return song_data_for_render
 
     def _parse_song_file(self, file_path):
         with open(file_path, 'r', encoding='utf-8') as f: lines = f.readlines()
@@ -251,118 +366,23 @@ class SongSheetApp(tk.Tk):
                 chords = re.findall(r'\[(.*?)\]', line)
                 current_section['lines'].append({'line': line, 'chords': chords})
 
-    def on_capo_change(self, direction):
-        self.params['capo'].set(self.params['capo'].get() + direction)
-        self.update_image()
-        
-    def on_scale_change(self, direction):
-        self.params['scale_steps'].set(self.params['scale_steps'].get() + direction)
-        self.update_image()
-
-    def update_image(self):
-        """ The main update function. Always regenerates the full image. """
-        if not self.current_song_data: return
-        
-        self.is_zoomed = False # A full update always resets the zoom state
-        
-        gui_params = {key: var.get() if isinstance(var, (tk.IntVar, tk.BooleanVar)) else var for key, var in self.params.items()}
-        gui_params['transpose_steps'] = gui_params['scale_steps'] - gui_params['capo']
-        song_data_for_render = self._get_transposed_song_data(gui_params)
-        
-        self.pil_image = create_arabic_song_image(song_data_for_render, gui_params)
-
-        if not self.pil_image: return
-
-        # Display full image on main canvas and projector
-        self._display_on_canvas(self.pil_image, self.image_canvas)
-        self._update_projector_view()
-
-    def _display_on_canvas(self, pil_img, canvas_widget):
-        self.after(50, lambda: self._display_on_canvas_after_delay(pil_img, canvas_widget))
-
-    def _display_on_canvas_after_delay(self, pil_img, canvas_widget):
-        if not (canvas_widget and canvas_widget.winfo_exists()): return
-        canvas_width = canvas_widget.winfo_width()
-        canvas_height = canvas_widget.winfo_height()
-        if canvas_width < 2 or canvas_height < 2: return
-
-        img_copy = pil_img.copy()
-        try: resample_filter = Image.Resampling.LANCZOS
-        except AttributeError: resample_filter = Image.LANCZOS
-
-        # --- START OF FIX ---
-        # If this is the projector view, scale the image to fit the screen.
-        # This works for both zoomed and full views.
-        if canvas_widget == self.projector_label:
-            img_w, img_h = img_copy.size
-            
-            # Calculate the best ratio to fit the image within the screen dimensions
-            ratio = min(canvas_width / img_w, canvas_height / img_h)
-            new_w = int(img_w * ratio)
-            new_h = int(img_h * ratio)
-            
-            img_copy = img_copy.resize((new_w, new_h), resample_filter)
-        else:
-            # Otherwise (for the main control panel), use thumbnail to keep it small.
-            img_copy.thumbnail((canvas_width, canvas_height), resample_filter)
-        # --- END OF FIX ---
-        
-        tk_img = ImageTk.PhotoImage(img_copy)
-        canvas_widget.delete("all")
-        canvas_widget.create_image(canvas_width / 2, canvas_height / 2, image=tk_img, anchor="center")
-        canvas_widget.image = tk_img
-
-    def _update_projector_view(self):
-        """ Updates only the projector view based on the current zoom state. """
-        if not (self.projector_window and self.projector_window.winfo_exists()):
-            return
-
-        if self.is_zoomed and self.pil_image_zoomed:
-            self._display_on_canvas(self.pil_image_zoomed, self.projector_label)
-        elif self.pil_image:
-            self._display_on_canvas(self.pil_image, self.projector_label)
-
-    def _get_transposed_song_data(self, gui_params):
-        song_data_for_render = []
-        for section in self.current_song_data:
-            if section['type'] != 'lyrics_section':
-                song_data_for_render.append(section)
-            else:
-                new_section = {'type': 'lyrics_section', 'title': section['title'], 'lines': []}
-                for line_info in section['lines']:
-                    transposed_line = line_info['line']
-                    transposed_chords = [MusicTheory.transpose_chord(c, gui_params['transpose_steps']) for c in line_info['chords']]
-                    for original, transposed in zip(line_info['chords'], transposed_chords):
-                        transposed_line = transposed_line.replace(f"[{original}]", f"[{transposed}]", 1)
-                    new_section['lines'].append(transposed_line)
-                song_data_for_render.append(new_section)
-        return song_data_for_render
-
     def export_image(self):
         if not self.pil_image: return
-        suggested_filename = f"{self.current_song_name}.png"
+        suggested_filename = f"{self.current_media_name}.png"
         filepath = filedialog.asksaveasfilename(initialfile=suggested_filename, defaultextension=".png", filetypes=[("PNG Image", "*.png"), ("All Files", "*.*")])
         if filepath:
             try: self.pil_image.save(filepath); print(f"Image saved to: {filepath}")
             except Exception as e: print(f"Error saving image: {e}")
 
     def set_as_default(self):
-        """ Overwrites the original txt file with the current scale and capo settings. """
-        if not self.current_file_path or not self.current_song_data:
-            print("Please select a song first.")
-            return
-
+        if not self.current_file_path or not self.current_song_data or self.current_mode != 'song': return
         transpose_steps = self.params['scale_steps'].get()
         new_capo = self.params['capo'].get()
-        
         new_lines = []
-        with open(self.current_file_path, 'r', encoding='utf-8') as f:
-            original_lines = f.readlines()
-
+        with open(self.current_file_path, 'r', encoding='utf-8') as f: original_lines = f.readlines()
         for line in original_lines:
             stripped_line = line.strip()
-            if stripped_line.startswith("Capo:"):
-                new_lines.append(f"Capo: {new_capo}\n")
+            if stripped_line.startswith("Capo:"): new_lines.append(f"Capo: {new_capo}\n")
             elif re.search(r'\[.*?\]', stripped_line) and not re.fullmatch(r'\[.*?\]', stripped_line):
                 original_chords = re.findall(r'\[(.*?)\]', stripped_line)
                 new_line = stripped_line
@@ -370,32 +390,26 @@ class SongSheetApp(tk.Tk):
                     transposed = MusicTheory.transpose_chord(chord, transpose_steps)
                     new_line = new_line.replace(f"[{chord}]", f"[{transposed}]", 1)
                 new_lines.append(new_line + '\n')
-            else:
-                new_lines.append(line)
-        
+            else: new_lines.append(line)
         try:
-            with open(self.current_file_path, 'w', encoding='utf-8') as f:
-                f.writelines(new_lines)
+            with open(self.current_file_path, 'w', encoding='utf-8') as f: f.writelines(new_lines)
             print(f"Successfully updated defaults for {os.path.basename(self.current_file_path)}")
-            
             self.params['scale_steps'].set(0)
             self._parse_song_file(self.current_file_path)
             self.update_image()
-
-        except Exception as e:
-            print(f"Error updating file: {e}")
+        except Exception as e: print(f"Error updating file: {e}")
 
     def open_projector_window(self):
         if self.projector_window and self.projector_window.winfo_exists():
             self.projector_window.lift()
             return
         self.projector_window = tk.Toplevel(self)
-        self.projector_window.title(f"Projector View - {self.current_song_name}")
+        self.projector_window.title(f"Projector View - {self.current_media_name}")
         self.projector_window.attributes('-fullscreen', True)
         self.projector_window.bind('<Escape>', self._exit_fullscreen)
         self.projector_label = tk.Canvas(self.projector_window, bg='white', highlightthickness=0)
         self.projector_label.pack(expand=True, fill="both")
-        self.projector_window.after(100, self.update_image)
+        self.projector_window.after(100, self._update_projector_view)
         self.projector_window.protocol("WM_DELETE_WINDOW", self.on_projector_close)
 
     def _exit_fullscreen(self, event=None):
@@ -435,35 +449,27 @@ class SongSheetApp(tk.Tk):
         x1, x2 = sorted((x1, x2)); y1, y2 = sorted((y1, y2))
         if abs(x1 - x2) < 10 or abs(y1 - y2) < 10: return
 
-        # Crop from the original, full-resolution image for best quality
-        image_to_crop = self.pil_image
-        if not image_to_crop: return
+        if not self.pil_image: return
 
-        # Get the currently displayed image in the main canvas
         displayed_image = self.image_canvas.image
         disp_w, disp_h = displayed_image.width(), displayed_image.height()
         canvas_w, canvas_h = self.image_canvas.winfo_width(), self.image_canvas.winfo_height()
         offset_x = (canvas_w - disp_w) / 2
         offset_y = (canvas_h - disp_h) / 2
         
-        # Transform selection coordinates from canvas space to image space
         img_x1 = x1 - offset_x
         img_y1 = y1 - offset_y
         
-        # Calculate the scaling ratio between the displayed image and the original
-        ratio = image_to_crop.width / disp_w
+        ratio = self.pil_image.width / disp_w
 
-        # Convert to original image coordinates for high-quality cropping
         crop_x1 = int(img_x1 * ratio)
         crop_y1 = int(img_y1 * ratio)
         crop_x2 = crop_x1 + int(abs(x1 - x2) * ratio)
         crop_y2 = crop_y1 + int(abs(y1 - y2) * ratio)
         
-        # Perform the crop and store the result
-        self.pil_image_zoomed = image_to_crop.crop((crop_x1, crop_y1, crop_x2, crop_y2))
+        self.pil_image_zoomed = self.pil_image.crop((crop_x1, crop_y1, crop_x2, crop_y2))
         self.is_zoomed = True
         
-        # Update only the projector view
         self._update_projector_view()
 
 if __name__ == "__main__":
