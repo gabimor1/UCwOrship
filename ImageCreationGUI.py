@@ -142,7 +142,6 @@ class SongSheetApp(tk.Tk):
         ttk.Button(button_frame, text="Import Media...", command=self._import_files).grid(row=0, column=1, sticky="ew", padx=2)
         ttk.Button(button_frame, text="Create Song...", command=self._create_new_song).grid(row=0, column=2, sticky="ew", padx=2)
 
-
     def _populate_session_list(self, parent_frame):
         parent_frame.grid_columnconfigure(0, weight=1)
         parent_frame.grid_rowconfigure(1, weight=1)
@@ -360,7 +359,7 @@ class SongSheetApp(tk.Tk):
                     new_section['lines'].append(transposed_line)
                 song_data_for_render.append(new_section)
         return song_data_for_render
-        
+
     def _parse_song_file(self, file_path):
         with open(file_path, 'r', encoding='utf-8') as f: lines = f.readlines()
         self.current_song_data = []
@@ -453,6 +452,7 @@ class SongSheetApp(tk.Tk):
 
         except Exception as e:
             messagebox.showerror("Error", f"Could not create the song file.\nError: {e}")
+
 
     def export_image(self):
         if not self.pil_image: return
