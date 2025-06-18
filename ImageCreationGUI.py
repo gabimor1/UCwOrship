@@ -1,7 +1,10 @@
 import re
 import os
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox, simpledialog
+import shutil
+import sys
+import subprocess
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 import arabic_reshaper
 from bidi.algorithm import get_display
@@ -128,8 +131,16 @@ class SongSheetApp(tk.Tk):
         self.media_listbox = tk.Listbox(parent_frame, exportselection=False)
         self.media_listbox.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
         self.media_listbox.bind("<<ListboxSelect>>", self.on_media_select)
-        add_button = ttk.Button(parent_frame, text="Add to Session List ↓", command=self._add_to_session)
-        add_button.grid(row=3, column=0, sticky="ew", padx=5, pady=5)
+        
+        # --- Action buttons for the browser ---
+        button_frame = ttk.Frame(parent_frame)
+        button_frame.grid(row=3, column=0, sticky="ew", padx=5, pady=5)
+        button_frame.grid_columnconfigure(0, weight=1)
+        button_frame.grid_columnconfigure(1, weight=1)
+        button_frame.grid_columnconfigure(2, weight=1)
+        ttk.Button(button_frame, text="Add to Session ↓", command=self._add_to_session).grid(row=0, column=0, sticky="ew", padx=2)
+        ttk.Button(button_frame, text="Import Media...", command=self._import_files).grid(row=0, column=1, sticky="ew", padx=2)
+        ttk.Button(button_frame, text="Create Song...", command=self._create_new_song).grid(row=0, column=2, sticky="ew", padx=2)
 
     def _populate_session_list(self, parent_frame):
         parent_frame.grid_columnconfigure(0, weight=1)
@@ -188,6 +199,7 @@ class SongSheetApp(tk.Tk):
     def _create_image_panel(self):
         self.image_canvas = tk.Canvas(self, bg="gray")
         self.image_canvas.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
+        # Bind events for zoom functionality
         self.image_canvas.bind("<ButtonPress-1>", self._start_zoom)
         self.image_canvas.bind("<B1-Motion>", self._drag_zoom)
         self.image_canvas.bind("<ButtonRelease-1>", self._end_zoom)
@@ -204,6 +216,7 @@ class SongSheetApp(tk.Tk):
             self.all_media_files.extend(sorted([f for f in os.listdir(img_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif'))]))
         except FileNotFoundError: print("'image_files' directory not found.")
         
+        self.all_media_files.sort()
         self._update_listbox(self.media_listbox, self.all_media_files)
 
     def _update_listbox(self, listbox, file_list):
@@ -260,7 +273,7 @@ class SongSheetApp(tk.Tk):
         
         if selected_file.lower().endswith('.txt'):
             self.current_mode = 'song'
-            self._toggle_controls('normal')
+            self._toggle_controls('!disabled')
             self.current_file_path = os.path.join("txt_files", selected_file)
             self._parse_song_file(self.current_file_path)
             self.params['scale_steps'].set(0)
@@ -365,6 +378,81 @@ class SongSheetApp(tk.Tk):
             elif current_section:
                 chords = re.findall(r'\[(.*?)\]', line)
                 current_section['lines'].append({'line': line, 'chords': chords})
+    
+    def _import_files(self):
+        title = "Import Media Files"
+        filetypes = [
+            ("All Media Files", "*.txt *.png *.jpg *.jpeg *.bmp *.gif"),
+            ("Song Files", "*.txt"),
+            ("Image Files", "*.png *.jpg *.jpeg *.bmp *.gif")
+        ]
+        
+        filepaths = filedialog.askopenfilenames(title=title, filetypes=filetypes)
+        
+        if not filepaths: return
+
+        song_dest = "txt_files"
+        image_dest = "image_files"
+        if not os.path.exists(song_dest): os.makedirs(song_dest)
+        if not os.path.exists(image_dest): os.makedirs(image_dest)
+
+        copied_count = 0
+        for src_path in filepaths:
+            try:
+                if src_path.lower().endswith('.txt'):
+                    shutil.copy(src_path, song_dest)
+                else:
+                    shutil.copy(src_path, image_dest)
+                copied_count += 1
+            except Exception as e:
+                messagebox.showerror("Import Error", f"Could not import {os.path.basename(src_path)}.\nError: {e}")
+
+        self.load_media_files()
+        messagebox.showinfo("Import Complete", f"Successfully imported {copied_count} file(s).")
+
+    def _create_new_song(self):
+        song_title = simpledialog.askstring("New Song", "Enter the title for the new song:")
+        if not song_title:
+            return
+
+        filename = f"{song_title}.txt"
+        
+        dest_folder = "txt_files"
+        if not os.path.exists(dest_folder):
+            os.makedirs(dest_folder)
+            
+        filepath = os.path.join(dest_folder, filename)
+
+        if os.path.exists(filepath):
+            messagebox.showerror("Error", f"A song named '{filename}' already exists.")
+            return
+
+        template = (
+            f"Title: {song_title}\n"
+            "Capo: 0\n\n"
+            "[Verse 1]\n"
+            "Lyrics go here[C]\n"
+            "More lyrics[G] here\n\n"
+            "[Chorus]\n"
+            "Chorus lyrics[Am] here\n"
+        )
+
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(template)
+
+            self.load_media_files()
+            
+            if sys.platform == "win32":
+                os.startfile(filepath)
+            elif sys.platform == "darwin": # macOS
+                subprocess.call(["open", filepath])
+            else: # linux
+                subprocess.call(["xdg-open", filepath])
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not create the song file.\nError: {e}")
+
 
     def export_image(self):
         if not self.pil_image: return
@@ -375,7 +463,7 @@ class SongSheetApp(tk.Tk):
             except Exception as e: print(f"Error saving image: {e}")
 
     def set_as_default(self):
-        if not self.current_file_path or not self.current_song_data or self.current_mode != 'song': return
+        if not self.current_file_path or self.current_mode != 'song': return
         transpose_steps = self.params['scale_steps'].get()
         new_capo = self.params['capo'].get()
         new_lines = []
