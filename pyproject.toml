@@ -1,0 +1,110 @@
+[project]
+
+name = "ucworship"
+version = "0.1"
+
+description = "UCwOrship: Worship songs presenter and projector by UCO Galilee"
+readme = "README.md"
+requires-python = ">= 3.11"
+
+dependencies = [
+    "arabic-reshaper",
+    "bidi"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit"
+]
+test = [
+    "pytest",
+    "ucworship[dev]"
+]
+
+[tool.setuptools.packages.find]
+include = ["ucworship*"]
+
+[tool.setuptools.package-data]
+"ucworship" = ["assets/*"]
+
+# Assume Python 3.11
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+# [tool.ruff.format]
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = ["E203", "E501", "UP038"]
+
+[tool.pylint.main]
+disable = [
+    # Errors
+    "import-error",
+    # Warnings
+    "exec-used,unused-import",  # already checked by other tools
+    "unnecessary-pass,unnecessary-ellipsis",
+    "logging-not-lazy",
+    "logging-format-interpolation",
+    "logging-fstring-interpolation",
+    "fixme",
+    "unused-argument",
+    "useless-parent-delegation",
+    "broad-except",
+    "protected-access",
+    "abstract-method",
+    "attribute-defined-outside-init",
+    # Conventions
+    "line-too-long",
+    "useless-import-alias",
+    "import-outside-toplevel",
+    "invalid-name",
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring",
+    "too-many-lines",
+    # Refactors
+    "cyclic-import",
+    "duplicate-code",
+    "no-else-return",
+    "too-many-ancestors",
+    "too-many-instance-attributes",
+    "too-few-public-methods",
+    "too-many-public-methods",
+    "too-many-return-statements",
+    "too-many-branches",
+    "too-many-arguments",
+    "too-many-locals",
+    "too-many-statements",
+    "too-many-boolean-expressions",
+    "too-many-nested-blocks",
+    "too-many-positional-arguments"
+]
+
+load-plugins = [
+    "pylint.extensions.docparams",
+    "pylint.extensions.bad_builtin"
+]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pyright]
+include = [
+    "ucworship", "tests"
+]
