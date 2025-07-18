@@ -40,8 +40,14 @@ class MusicTheory:
         except ValueError:
             return chord_str
 
+        #print(current_index)
+        #print(steps)
+
         new_index = (current_index + steps) % 12
+        #print(new_index)
+
         new_root = MusicTheory.NOTES_SHARP[new_index] # Always return sharp for consistency
+        #print(new_root, quality)
         return new_root + quality
 
 # --- 2. Main GUI Application ---
@@ -73,7 +79,7 @@ class SongSheetApp(tk.Tk):
         self.font_chord = "fonts/ARIAL.TTF"
         
         self.params = {
-            'lyric_font_size': tk.IntVar(value=56),
+            'lyric_font_size': tk.IntVar(value=46),
             'chord_font_size': tk.IntVar(value=24),
             'capo': tk.IntVar(value=0),
             'scale_steps': tk.IntVar(value=0),
@@ -493,7 +499,7 @@ class SongSheetApp(tk.Tk):
             return
         self.projector_window = tk.Toplevel(self)
         self.projector_window.title(f"Projector View - {self.current_media_name}")
-        self.projector_window.attributes('-fullscreen', True)
+        self.projector_window.attributes('-fullscreen', False)
         self.projector_window.bind('<Escape>', self._exit_fullscreen)
         self.projector_label = tk.Canvas(self.projector_window, bg='white', highlightthickness=0)
         self.projector_label.pack(expand=True, fill="both")

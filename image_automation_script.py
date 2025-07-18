@@ -20,8 +20,8 @@ def create_arabic_song_image(song_data, params):
     chord_font_path = params['font_chord']
 
     # --- 2. Define Styles & Quality (from your script) ---
-    image_width = 850
-    padding = 130
+    image_width = 1850
+    padding = 70
     line_spacing = 18
     section_spacing = 70
     
@@ -49,7 +49,7 @@ def create_arabic_song_image(song_data, params):
     temp_height = 4000 * scale_factor
     img = Image.new('RGB', (image_width_scaled, temp_height), color=background_color)
     draw = ImageDraw.Draw(img)
-    y_position = padding_scaled
+    y_position = padding_scaled/3
     x_size = 0
     
     # --- Pre-calculation loop to find the widest line (from your script) ---
@@ -65,6 +65,11 @@ def create_arabic_song_image(song_data, params):
                 if total_lyric_width > max_line_size:
                     max_line_size = total_lyric_width
 
+
+    #image_width_scaled_post = int((max_line_size + 2*padding_scaled)*scale_factor)
+    #img = Image.new('RGB', (image_width_scaled_post, temp_height), color=background_color)
+    #draw = ImageDraw.Draw(img)
+
     # --- 5. Draw Each Section with Right-to-Left Logic ---
     for section in song_data:
         sec_type = section['type']
@@ -73,15 +78,16 @@ def create_arabic_song_image(song_data, params):
             bidi_text = get_display(arabic_reshaper.reshape(section['content']))
             text_width = draw.textlength(bidi_text, font=title_font)
             if text_width > x_size: x_size = text_width
-            draw.text((image_width_scaled / 2, y_position), bidi_text, font=title_font, fill=text_color, anchor="mt")
+            offset_to_center = (max_line_size - text_width)/2
+            draw.text((image_width_scaled - padding_scaled*2 - offset_to_center, y_position), bidi_text, font=title_font, fill=text_color, anchor="mt")
             y_position += title_font.getbbox(bidi_text)[3] + line_spacing_scaled
         
         elif sec_type == 'capo':
             capo_text = f"Capo: {params['capo']}"
             text_width = draw.textlength(capo_text, font=capo_font)
             if text_width > x_size: x_size = text_width
-            draw.text((padding*2, y_position), capo_text, font=capo_font, fill=text_color, anchor="mt")
-            y_position += capo_font.getbbox(capo_text)[3] + section_spacing_scaled
+            draw.text((image_width_scaled - padding_scaled - max_line_size, y_position), capo_text, font=capo_font, fill=text_color, anchor="mt")
+            y_position += capo_font.getbbox(capo_text)[3] #+ section_spacing_scaled
 
         elif sec_type == 'lyrics_section':
             is_chorus = 'chorus' in section['title'].lower()
@@ -126,7 +132,8 @@ def create_arabic_song_image(song_data, params):
             y_position += section_spacing_scaled
 
     # --- 6. Crop, Resize, and Return Final Image ---
-    final_image_scaled = img.crop((0, 0, image_width_scaled, y_position))
+    croping_redundant_area = int((max_line_size + 2*padding_scaled))
+    final_image_scaled = img.crop((image_width_scaled-croping_redundant_area, 0, image_width_scaled, y_position))
     final_width = int(final_image_scaled.width / scale_factor)
     final_height = int(final_image_scaled.height / scale_factor)
 
