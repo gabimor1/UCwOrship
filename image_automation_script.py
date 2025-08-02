@@ -95,37 +95,78 @@ def create_arabic_song_image(song_data, params):
             
             for line in section['lines']:
                 clean_lyric_line = re.sub(r'\[.*?\]', '', line)
+                # print(clean_lyric_line)
                 reshaped_clean_line = get_display(arabic_reshaper.reshape(clean_lyric_line))
-                
+                # print("reshaped_clean_line", reshaped_clean_line)
                 segments = [s for s in re.split(r'(\[.*?\])', line) if s]
-                
+                # print(segments)
                 lyric_y_pos = y_position + chord_font.getbbox("Cm")[3]
 
                 total_lyric_width = draw.textlength(reshaped_clean_line, font=current_lyric_font)
                 offset_to_center = (max_line_size - total_lyric_width) / 2
                 
                 draw.text((image_width_scaled - padding_scaled - offset_to_center, lyric_y_pos), reshaped_clean_line, font=current_lyric_font, fill=text_color, anchor="ra")
-
+                # print("Text start x:",image_width_scaled - padding_scaled - offset_to_center)
+                # print("Text end x:",image_width_scaled - padding_scaled - offset_to_center-total_lyric_width)
+                # print(image_width_scaled,"-", padding_scaled,"-", offset_to_center)
                 if show_chords:
                     x_calculator = image_width_scaled - padding_scaled - offset_to_center
                     reshaped_lyric_cursor = len(reshaped_clean_line)
-                    
-                    for segment in segments:
-                        move_chords = 0
+                    # print("reshaped_clean_line", reshaped_clean_line, reshaped_lyric_cursor)
+                    # print("reshaped_clean_line reversed", reshaped_clean_line[::-1], reshaped_lyric_cursor)
+
+                    for segment in segments:                        
                         if not re.fullmatch(r'\[.*?\]', segment):
                             segment_len = len(segment)
-                            shaped_substring = reshaped_clean_line[reshaped_lyric_cursor - segment_len : reshaped_lyric_cursor]
-                            #print(shaped_substring)
-                            #move_chords = draw.textlength(shaped_substring[:-1], font=current_lyric_font)
-                            reshaped_lyric_cursor -= segment_len
+                            # reshaped_clean_line_len = len(reshaped_clean_line)
+                            # print("-"*30, reshaped_clean_line[0])
+
+                            index = 0
+                            occurrence_count = 0
+                            while index < len(segment):
+                                # Check for the sequence at the current position
+                                if index + 1 < len(segment) and segment[index] == "ل" and segment[index+1] == "ا":
+                                    # If found, increment the counter and skip the next two characters
+                                    occurrence_count += 1
+                                    # print("-"*10, "found la is segment", "-"*10)
+                                    index += 2
+                                else:
+                                    # Otherwise, just move to the next one
+                                    index += 1
+                            print(occurrence_count, "occurrence_count")
+                            shaped_substring = reshaped_clean_line[reshaped_lyric_cursor - segment_len + occurrence_count: reshaped_lyric_cursor]
+                            
+                            
+                            adjustment = 0
+                            if get_display(arabic_reshaper.reshape("لا")) in shaped_substring:
+                                print("-"*10, "found la", "-"*10)
+                                adjustment = occurrence_count*(draw.textlength(get_display(arabic_reshaper.reshape("لا")), font=current_lyric_font) - (draw.textlength(get_display(arabic_reshaper.reshape("ل")), font=current_lyric_font)+draw.textlength(get_display(arabic_reshaper.reshape("ا")), font=current_lyric_font)))
+                            elif get_display(arabic_reshaper.reshape("سلا")[1:]) in shaped_substring:
+                                print("-"*10, "found la", "-"*10)
+                                adjustment = occurrence_count*(draw.textlength(get_display(arabic_reshaper.reshape("سلا")[1:]), font=current_lyric_font) - (draw.textlength(get_display(arabic_reshaper.reshape("ل")), font=current_lyric_font)+draw.textlength(get_display(arabic_reshaper.reshape("ا")), font=current_lyric_font)))
+                            # print("adjustment", adjustment)
+
+                            print("segment", segment, len(segment))
+                            print("shaped_substring", shaped_substring, len(shaped_substring))
+                            # la_shit = get_display(arabic_reshaper.arabic_reshaper.reshape("ال"))
+                            # print(draw.textlength(get_display(arabic_reshaper.reshape("لا")), font=current_lyric_font))
+                            # print(draw.textlength(get_display(arabic_reshaper.reshape("ل")), font=current_lyric_font))
+                            # print(draw.textlength(get_display(arabic_reshaper.reshape("ا")), font=current_lyric_font))
+
+                            reshaped_lyric_cursor -= segment_len - occurrence_count
                             lyric_width = draw.textlength(shaped_substring, font=current_lyric_font)
-                            x_calculator -= lyric_width
+                            # print(lyric_width)
+                            x_calculator = x_calculator - lyric_width
                         else:
                             chord_text = segment[1:-1]
+                            # print(chord_text)
                             #if len(chord_text) > 1: x_calculator += draw.textlength(chord_text[1:], font=chord_font)
-                            #x_calculator += move_chords
+                            # print("Chord start x:",x_calculator)
+                            chord_size_mid = draw.textlength(chord_text, font=chord_font)/2
+                            print(chord_size_mid)
+                            # x_calculator += chord_size_mid
                             draw.text((x_calculator, y_position), chord_text, font=chord_font, fill=chord_color, anchor="ra")
-                            #x_calculator -= move_chords
+                            # x_calculator -= chord_size_mid
                             #if len(chord_text) > 1: x_calculator -= draw.textlength(chord_text[1:], font=chord_font)
 
                 y_position += current_lyric_font.getbbox("Sample")[3] + chord_font.getbbox("Cm")[3] + line_spacing_scaled
