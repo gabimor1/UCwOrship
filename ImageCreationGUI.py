@@ -40,14 +40,8 @@ class MusicTheory:
         except ValueError:
             return chord_str
 
-        #print(current_index)
-        #print(steps)
-
         new_index = (current_index + steps) % 12
-        #print(new_index)
-
         new_root = MusicTheory.NOTES_SHARP[new_index] # Always return sharp for consistency
-        #print(new_root, quality)
         return new_root + quality
 
 # --- 2. Main GUI Application ---
@@ -63,6 +57,7 @@ class SongSheetApp(tk.Tk):
         self.current_song_data = None
         self.current_media_name = ""
         self.current_file_path = ""
+        self.original_capo = 0 # --- CHANGE 1: Added to store the capo from the file ---
         self.pil_image = None # To hold the original, full-resolution PIL image
         self.pil_image_zoomed = None # To hold the currently zoomed image for the projector
         self.projector_window = None # To hold the external projector window
@@ -148,6 +143,7 @@ class SongSheetApp(tk.Tk):
         ttk.Button(button_frame, text="Import Media...", command=self._import_files).grid(row=0, column=1, sticky="ew", padx=2)
         ttk.Button(button_frame, text="Create Song...", command=self._create_new_song).grid(row=0, column=2, sticky="ew", padx=2)
 
+
     def _populate_session_list(self, parent_frame):
         parent_frame.grid_columnconfigure(0, weight=1)
         parent_frame.grid_rowconfigure(1, weight=1)
@@ -205,7 +201,6 @@ class SongSheetApp(tk.Tk):
     def _create_image_panel(self):
         self.image_canvas = tk.Canvas(self, bg="gray")
         self.image_canvas.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
-        # Bind events for zoom functionality
         self.image_canvas.bind("<ButtonPress-1>", self._start_zoom)
         self.image_canvas.bind("<B1-Motion>", self._drag_zoom)
         self.image_canvas.bind("<ButtonRelease-1>", self._end_zoom)
@@ -311,7 +306,12 @@ class SongSheetApp(tk.Tk):
             if not self.current_song_data: return
             self.is_zoomed = False
             gui_params = {key: var.get() if isinstance(var, (tk.IntVar, tk.BooleanVar)) else var for key, var in self.params.items()}
-            gui_params['transpose_steps'] = gui_params['scale_steps'] - gui_params['capo']
+            
+            # --- CHANGE 3: New logic for calculating transposition ---
+            scale_transposition = gui_params['scale_steps']
+            capo_compensation = self.original_capo - gui_params['capo']
+            gui_params['transpose_steps'] = scale_transposition + capo_compensation
+            
             song_data_for_render = self._get_transposed_song_data(gui_params)
             self.pil_image = create_arabic_song_image(song_data_for_render, gui_params)
             if not self.pil_image: return
@@ -365,7 +365,7 @@ class SongSheetApp(tk.Tk):
                     new_section['lines'].append(transposed_line)
                 song_data_for_render.append(new_section)
         return song_data_for_render
-
+        
     def _parse_song_file(self, file_path):
         with open(file_path, 'r', encoding='utf-8') as f: lines = f.readlines()
         self.current_song_data = []
@@ -375,8 +375,14 @@ class SongSheetApp(tk.Tk):
             if not line: continue
             if line.startswith("Title:"): self.current_song_data.append({'type': 'title', 'content': line.replace("Title:", "").strip()})
             elif line.startswith("Capo:"):
-                try: self.params['capo'].set(int(line.replace('Capo:', '').strip()))
-                except ValueError: self.params['capo'].set(0)
+                # --- CHANGE 2: Store the original capo from the file ---
+                try: 
+                    capo_val = int(line.replace('Capo:', '').strip())
+                    self.params['capo'].set(capo_val)
+                    self.original_capo = capo_val
+                except ValueError: 
+                    self.params['capo'].set(0)
+                    self.original_capo = 0
                 self.current_song_data.append({'type': 'capo'})
             elif re.fullmatch(r'\[.*?\]', line):
                 current_section = {'type': 'lyrics_section', 'title': line[1:-1], 'lines': []}
@@ -469,14 +475,18 @@ class SongSheetApp(tk.Tk):
             except Exception as e: print(f"Error saving image: {e}")
 
     def set_as_default(self):
-        if not self.current_file_path or self.current_mode != 'song': return
+        if not self.current_file_path: return
         transpose_steps = self.params['scale_steps'].get()
         new_capo = self.params['capo'].get()
+        
         new_lines = []
-        with open(self.current_file_path, 'r', encoding='utf-8') as f: original_lines = f.readlines()
+        with open(self.current_file_path, 'r', encoding='utf-8') as f:
+            original_lines = f.readlines()
+
         for line in original_lines:
             stripped_line = line.strip()
-            if stripped_line.startswith("Capo:"): new_lines.append(f"Capo: {new_capo}\n")
+            if stripped_line.startswith("Capo:"):
+                new_lines.append(f"Capo: {new_capo}\n")
             elif re.search(r'\[.*?\]', stripped_line) and not re.fullmatch(r'\[.*?\]', stripped_line):
                 original_chords = re.findall(r'\[(.*?)\]', stripped_line)
                 new_line = stripped_line
@@ -484,14 +494,20 @@ class SongSheetApp(tk.Tk):
                     transposed = MusicTheory.transpose_chord(chord, transpose_steps)
                     new_line = new_line.replace(f"[{chord}]", f"[{transposed}]", 1)
                 new_lines.append(new_line + '\n')
-            else: new_lines.append(line)
+            else:
+                new_lines.append(line)
+        
         try:
-            with open(self.current_file_path, 'w', encoding='utf-8') as f: f.writelines(new_lines)
+            with open(self.current_file_path, 'w', encoding='utf-8') as f:
+                f.writelines(new_lines)
             print(f"Successfully updated defaults for {os.path.basename(self.current_file_path)}")
+            
             self.params['scale_steps'].set(0)
             self._parse_song_file(self.current_file_path)
             self.update_image()
-        except Exception as e: print(f"Error updating file: {e}")
+
+        except Exception as e:
+            print(f"Error updating file: {e}")
 
     def open_projector_window(self):
         if self.projector_window and self.projector_window.winfo_exists():
@@ -516,7 +532,6 @@ class SongSheetApp(tk.Tk):
             self.projector_label = None
 
     def _reset_zoom(self, event):
-        """ Resets zoom on double-click """
         self.is_zoomed = False
         self._update_projector_view()
 
