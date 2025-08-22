@@ -178,7 +178,7 @@ class SongSheetApp(tk.Tk):
 
     def load_song_files(self):
         try:
-            txt_dir = "txt_files"
+            txt_dir = "assets/txt_files"
             self.all_song_files = sorted([f for f in os.listdir(txt_dir) if f.endswith('.txt')])
             self._update_main_listbox(self.all_song_files)
         except FileNotFoundError: self.song_listbox.insert(tk.END, "'txt_files' directory not found.")
@@ -227,7 +227,7 @@ class SongSheetApp(tk.Tk):
         if not selection_indices: return
         selected_file = source_listbox.get(selection_indices[0])
         self.current_song_name = os.path.splitext(selected_file)[0]
-        self.current_file_path = os.path.join("txt_files", selected_file)
+        self.current_file_path = os.path.join("assets", "txt_files", selected_file)
         self._parse_song_file(self.current_file_path)
         self.params['scale_steps'].set(0)
         self.update_image()

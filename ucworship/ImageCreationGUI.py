@@ -5,13 +5,17 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 import shutil
 import sys
 import subprocess
-from PIL import Image, ImageDraw, ImageFont, ImageTk
-import arabic_reshaper
-from bidi.algorithm import get_display
+from PIL import Image, ImageTk
 
 # This line IMPORTS your perfected image creation function from your script.
 # Make sure 'image_automation_script.py' is in the same folder.
-from image_automation_script import create_arabic_song_image
+from ucworship.image_automation_script import create_arabic_song_image
+
+
+package_dir = os.path.dirname(__file__)
+song_dest = os.path.join(package_dir, "assets", "txt_files")
+image_dest = os.path.join(package_dir, "assets", "image_files")
+
 
 # --- 1. Music Theory Engine ---
 # This class handles all chord transpositions for scale and capo adjustments.
@@ -132,7 +136,7 @@ class SongSheetApp(tk.Tk):
         self.media_listbox = tk.Listbox(parent_frame, exportselection=False)
         self.media_listbox.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
         self.media_listbox.bind("<<ListboxSelect>>", self.on_media_select)
-        
+
         # --- Action buttons for the browser ---
         button_frame = ttk.Frame(parent_frame)
         button_frame.grid(row=3, column=0, sticky="ew", padx=5, pady=5)
@@ -209,14 +213,12 @@ class SongSheetApp(tk.Tk):
     def load_media_files(self):
         self.all_media_files = []
         try:
-            txt_dir = "txt_files"
-            self.all_media_files.extend(sorted([f for f in os.listdir(txt_dir) if f.endswith('.txt')]))
+            self.all_media_files.extend(sorted([f for f in os.listdir(song_dest) if f.endswith('.txt')]))
         except FileNotFoundError: print("'txt_files' directory not found.")
         try:
-            img_dir = "image_files"
-            self.all_media_files.extend(sorted([f for f in os.listdir(img_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif'))]))
+            self.all_media_files.extend(sorted([f for f in os.listdir(image_dest) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif'))]))
         except FileNotFoundError: print("'image_files' directory not found.")
-        
+
         self.all_media_files.sort()
         self._update_listbox(self.media_listbox, self.all_media_files)
 
@@ -256,11 +258,11 @@ class SongSheetApp(tk.Tk):
     def on_media_select(self, event):
         self._clear_other_selections(self.media_listbox)
         self._process_selection(self.media_listbox)
-        
+
     def on_session_item_select(self, event):
         self._clear_other_selections(self.session_listbox)
         self._process_selection(self.session_listbox)
-        
+
     def _clear_other_selections(self, current_listbox):
         if current_listbox != self.media_listbox: self.media_listbox.selection_clear(0, tk.END)
         if current_listbox != self.session_listbox: self.session_listbox.selection_clear(0, tk.END)
@@ -268,28 +270,28 @@ class SongSheetApp(tk.Tk):
     def _process_selection(self, listbox):
         selection_indices = listbox.curselection()
         if not selection_indices: return
-        
+
         selected_file = listbox.get(selection_indices[0])
         self.current_media_name = os.path.splitext(selected_file)[0]
-        
+
         if selected_file.lower().endswith('.txt'):
             self.current_mode = 'song'
             self._toggle_controls('!disabled')
-            self.current_file_path = os.path.join("txt_files", selected_file)
+            self.current_file_path = os.path.join(song_dest, selected_file)
             self._parse_song_file(self.current_file_path)
             self.params['scale_steps'].set(0)
             self.update_image()
         else:
             self.current_mode = 'image'
             self._toggle_controls('disabled')
-            self.current_file_path = os.path.join("image_files", selected_file)
+            self.current_file_path = os.path.join(image_dest, selected_file)
             try:
                 self.pil_image = Image.open(self.current_file_path)
                 self.update_image(is_static_image=True)
             except Exception as e:
                 print(f"Error opening image {self.current_file_path}: {e}")
                 self.pil_image = None; self.image_canvas.delete("all")
-    
+
     def on_capo_change(self, direction):
         self.params['capo'].set(self.params['capo'].get() + direction)
         self.update_image()
@@ -390,7 +392,7 @@ class SongSheetApp(tk.Tk):
             elif current_section:
                 chords = re.findall(r'\[(.*?)\]', line)
                 current_section['lines'].append({'line': line, 'chords': chords})
-    
+
     def _import_files(self):
         title = "Import Media Files"
         filetypes = [
@@ -398,13 +400,11 @@ class SongSheetApp(tk.Tk):
             ("Song Files", "*.txt"),
             ("Image Files", "*.png *.jpg *.jpeg *.bmp *.gif")
         ]
-        
+
         filepaths = filedialog.askopenfilenames(title=title, filetypes=filetypes)
-        
+
         if not filepaths: return
 
-        song_dest = "txt_files"
-        image_dest = "image_files"
         if not os.path.exists(song_dest): os.makedirs(song_dest)
         if not os.path.exists(image_dest): os.makedirs(image_dest)
 
@@ -428,11 +428,11 @@ class SongSheetApp(tk.Tk):
             return
 
         filename = f"{song_title}.txt"
-        
+
         dest_folder = "txt_files"
         if not os.path.exists(dest_folder):
             os.makedirs(dest_folder)
-            
+
         filepath = os.path.join(dest_folder, filename)
 
         if os.path.exists(filepath):
@@ -454,7 +454,7 @@ class SongSheetApp(tk.Tk):
                 f.write(template)
 
             self.load_media_files()
-            
+
             if sys.platform == "win32":
                 os.startfile(filepath)
             elif sys.platform == "darwin": # macOS
@@ -565,7 +565,7 @@ class SongSheetApp(tk.Tk):
         canvas_w, canvas_h = self.image_canvas.winfo_width(), self.image_canvas.winfo_height()
         offset_x = (canvas_w - disp_w) / 2
         offset_y = (canvas_h - disp_h) / 2
-        
+
         img_x1 = x1 - offset_x
         img_y1 = y1 - offset_y
         
@@ -578,9 +578,5 @@ class SongSheetApp(tk.Tk):
         
         self.pil_image_zoomed = self.pil_image.crop((crop_x1, crop_y1, crop_x2, crop_y2))
         self.is_zoomed = True
-        
-        self._update_projector_view()
 
-if __name__ == "__main__":
-    app = SongSheetApp()
-    app.mainloop()
+        self._update_projector_view()
