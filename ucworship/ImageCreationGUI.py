@@ -11,6 +11,12 @@ from PIL import Image, ImageTk
 # Make sure 'image_automation_script.py' is in the same folder.
 from ucworship.image_automation_script import create_arabic_song_image
 
+
+package_dir = os.path.dirname(__file__)
+song_dest = os.path.join(package_dir, "assets", "txt_files")
+image_dest = os.path.join(package_dir, "assets", "image_files")
+
+
 # --- 1. Music Theory Engine ---
 # This class handles all chord transpositions for scale and capo adjustments.
 class MusicTheory:
@@ -207,12 +213,10 @@ class SongSheetApp(tk.Tk):
     def load_media_files(self):
         self.all_media_files = []
         try:
-            txt_dir = "assets/txt_files"
-            self.all_media_files.extend(sorted([f for f in os.listdir(txt_dir) if f.endswith('.txt')]))
+            self.all_media_files.extend(sorted([f for f in os.listdir(song_dest) if f.endswith('.txt')]))
         except FileNotFoundError: print("'txt_files' directory not found.")
         try:
-            img_dir = "image_files"
-            self.all_media_files.extend(sorted([f for f in os.listdir(img_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif'))]))
+            self.all_media_files.extend(sorted([f for f in os.listdir(image_dest) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif'))]))
         except FileNotFoundError: print("'image_files' directory not found.")
 
         self.all_media_files.sort()
@@ -273,14 +277,14 @@ class SongSheetApp(tk.Tk):
         if selected_file.lower().endswith('.txt'):
             self.current_mode = 'song'
             self._toggle_controls('!disabled')
-            self.current_file_path = os.path.join("assets", "txt_files", selected_file)
+            self.current_file_path = os.path.join(song_dest, selected_file)
             self._parse_song_file(self.current_file_path)
             self.params['scale_steps'].set(0)
             self.update_image()
         else:
             self.current_mode = 'image'
             self._toggle_controls('disabled')
-            self.current_file_path = os.path.join("image_files", selected_file)
+            self.current_file_path = os.path.join(image_dest, selected_file)
             try:
                 self.pil_image = Image.open(self.current_file_path)
                 self.update_image(is_static_image=True)
@@ -401,8 +405,6 @@ class SongSheetApp(tk.Tk):
 
         if not filepaths: return
 
-        song_dest = "txt_files"
-        image_dest = "image_files"
         if not os.path.exists(song_dest): os.makedirs(song_dest)
         if not os.path.exists(image_dest): os.makedirs(image_dest)
 
