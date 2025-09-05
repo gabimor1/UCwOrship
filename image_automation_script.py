@@ -4,6 +4,8 @@ import arabic_reshaper
 from bidi.algorithm import get_display
 
 def create_arabic_song_image(song_data, params):
+    
+    debug = 0
     """
     Generates a right-to-left song sheet image from pre-parsed song data and GUI parameters.
     This is your perfected logic, adapted to be called as a function.
@@ -110,6 +112,8 @@ def create_arabic_song_image(song_data, params):
                 # print("Text end x:",image_width_scaled - padding_scaled - offset_to_center-total_lyric_width)
                 # print(image_width_scaled,"-", padding_scaled,"-", offset_to_center)
                 if show_chords:
+                    last_accord_end = 10000000
+                    current_for_double_trouble = 10000000
                     x_calculator = image_width_scaled - padding_scaled - offset_to_center
                     reshaped_lyric_cursor = len(reshaped_clean_line)
                     # print("reshaped_clean_line", reshaped_clean_line, reshaped_lyric_cursor)
@@ -134,7 +138,7 @@ def create_arabic_song_image(song_data, params):
                                 else:
                                     # Otherwise, just move to the next one
                                     index += 1
-                            print(occurrence_count, "occurrence_count")
+                            if debug: print(occurrence_count, "occurrence_count")
 
                             # Find allah sequence
                             index = 0
@@ -144,27 +148,27 @@ def create_arabic_song_image(song_data, params):
                                 if index + 3 < len(segment) and segment[index] == "ا" and segment[index+1] == "ل" and segment[index+2] == "ل" and segment[index+3] == "ه":
                                     # If found, increment the counter and skip the next two characters
                                     occurrence_countـallah += 3 
-                                    print("-"*10, "found allah is segment", "-"*10)
+                                    if debug: print("-"*10, "found allah is segment", "-"*10)
                                     index += 4
                                 else:
                                     # Otherwise, just move to the next one
                                     index += 1
-                            print(occurrence_count, "occurrence_count")
+                            if debug: print(occurrence_count, "occurrence_count")
 
                             shaped_substring = reshaped_clean_line[reshaped_lyric_cursor - segment_len + occurrence_count + occurrence_countـallah: reshaped_lyric_cursor]
                             
                             
                             adjustment = 0
                             if get_display(arabic_reshaper.reshape("لا")) in shaped_substring:
-                                print("-"*10, "found la", "-"*10)
+                                if debug: print("-"*10, "found la", "-"*10)
                                 adjustment = occurrence_count*(draw.textlength(get_display(arabic_reshaper.reshape("لا")), font=current_lyric_font) - (draw.textlength(get_display(arabic_reshaper.reshape("ل")), font=current_lyric_font)+draw.textlength(get_display(arabic_reshaper.reshape("ا")), font=current_lyric_font)))
                             elif get_display(arabic_reshaper.reshape("سلا")[1:]) in shaped_substring:
-                                print("-"*10, "found la", "-"*10)
+                                if debug: print("-"*10, "found la", "-"*10)
                                 adjustment = occurrence_count*(draw.textlength(get_display(arabic_reshaper.reshape("سلا")[1:]), font=current_lyric_font) - (draw.textlength(get_display(arabic_reshaper.reshape("ل")), font=current_lyric_font)+draw.textlength(get_display(arabic_reshaper.reshape("ا")), font=current_lyric_font)))
                             # print("adjustment", adjustment)
 
-                            print("segment", segment, len(segment))
-                            print("shaped_substring", shaped_substring, len(shaped_substring))
+                            if debug: print("segment", segment, len(segment))
+                            if debug: print("shaped_substring", shaped_substring, len(shaped_substring))
                             # la_shit = get_display(arabic_reshaper.arabic_reshaper.reshape("ال"))
                             # print(draw.textlength(get_display(arabic_reshaper.reshape("لا")), font=current_lyric_font))
                             # print(draw.textlength(get_display(arabic_reshaper.reshape("ل")), font=current_lyric_font))
@@ -176,19 +180,24 @@ def create_arabic_song_image(song_data, params):
                             x_calculator = x_calculator - lyric_width
                         else:
                             chord_text = segment[1:-1]
-                            # print(chord_text)
+                            if debug: print(chord_text)
+                            # font_adjusted = chord_font
+                            # if "(" in chord_text:
+                            #     font_adjusted = chord_font - int(chord_font)*0.2
+                             
                             #if len(chord_text) > 1: x_calculator += draw.textlength(chord_text[1:], font=chord_font)
                             # print("Chord start x:",x_calculator)
                             chord_size_mid = draw.textlength(chord_text, font=chord_font)/2
-                            print(chord_size_mid)
                             # x_calculator += chord_size_mid
-                            if x_calculator < chord_size_mid:
-                                draw.text((last_accord_end, y_position), chord_text, font=chord_font, fill=chord_color, anchor="ra")
+                            if (x_calculator >= last_accord_end) or (x_calculator >= current_for_double_trouble):
+                                draw.text((min(last_accord_end,current_for_double_trouble), y_position), chord_text, font=chord_font, fill=chord_color, anchor="ra")
+                                if debug: print("I AM PUSHING AN ACCORD  ---  ", chord_text)
+                                current_for_double_trouble = last_accord_end - chord_size_mid*2
                             else:
                                 draw.text((x_calculator, y_position), chord_text, font=chord_font, fill=chord_color, anchor="ra")
                             # x_calculator -= chord_size_mid
                             #if len(chord_text) > 1: x_calculator -= draw.textlength(chord_text[1:], font=chord_font)
-                            last_accord_end = x_calculator - chord_size_mid
+                            last_accord_end = x_calculator - chord_size_mid*2
 
                 y_position += current_lyric_font.getbbox("Sample")[3] + chord_font.getbbox("Cm")[3] + line_spacing_scaled
             y_position += section_spacing_scaled

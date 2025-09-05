@@ -79,7 +79,7 @@ class SongSheetApp(tk.Tk):
             'capo': tk.IntVar(value=0),
             'scale_steps': tk.IntVar(value=0),
             'show_chords': tk.BooleanVar(value=True),
-            'scale_factor': 10,
+            'scale_factor': 5,
             'title_font_size': 32,
             'capo_font_size': 14,
             'font_reg': self.font_reg,
