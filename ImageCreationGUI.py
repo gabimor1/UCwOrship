@@ -23,7 +23,7 @@ class MusicTheory:
     def transpose_chord(chord_str, steps):
         if not chord_str or steps == 0:
             return chord_str
-            
+        print(chord_str)
         match = re.match(r'([A-G][b#]?)', chord_str)
         if not match: return chord_str
 
