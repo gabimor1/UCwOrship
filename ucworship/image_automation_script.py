@@ -217,8 +217,8 @@ def create_arabic_song_image(song_data, params):
             y_position += section_spacing_scaled
 
     # --- 6. Crop, Resize, and Return Final Image ---
-    croping_redundant_area = int((max_line_size + 2*padding_scaled))
-    final_image_scaled = img.crop((image_width_scaled-croping_redundant_area, 0, image_width_scaled, y_position))
+    cropping_redundant_area = int((max_line_size + 2*padding_scaled))
+    final_image_scaled = img.crop((image_width_scaled-cropping_redundant_area, 0, image_width_scaled, y_position))
 
     final_width = int(final_image_scaled.width / scale_factor)
     final_height = int(final_image_scaled.height / scale_factor)
