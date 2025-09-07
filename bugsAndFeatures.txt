@@ -1,0 +1,7 @@
+1. Fix scale when it reaches "C" it is not working
+2. Fix adding "#" to chords and transpose
+4. Fix adding an accord before the word at the start of the line
+5. Add the option to add "()" to signal half and make the accord smaller in font to accomodat fo size - DONE [Still don't support capo+- and scale +-]
+6. Add option to add chords for English songs
+7. accept Antonio's PR
+8. Add chords intro option 

@@ -17,6 +17,12 @@ song_dest = os.path.join(package_dir, "assets", "txt_files")
 image_dest = os.path.join(package_dir, "assets", "image_files")
 
 
+
+package_dir = os.path.dirname(__file__)
+song_dest = os.path.join(package_dir, "assets", "txt_files")
+image_dest = os.path.join(package_dir, "assets", "image_files")
+
+
 # --- 1. Music Theory Engine ---
 # This class handles all chord transpositions for scale and capo adjustments.
 class MusicTheory:
@@ -28,6 +34,7 @@ class MusicTheory:
         if not chord_str or steps == 0:
             return chord_str
 
+        print(chord_str)
         match = re.match(r"([A-G][b#]?)", chord_str)
         if not match:
             return chord_str
@@ -85,7 +92,7 @@ class SongSheetApp(tk.Tk):
             "capo": tk.IntVar(value=0),
             "scale_steps": tk.IntVar(value=0),
             "show_chords": tk.BooleanVar(value=True),
-            "scale_factor": 10,
+            "scale_factor": 5,
             "title_font_size": 32,
             "capo_font_size": 14,
             "font_reg": self.font_reg,
@@ -286,7 +293,6 @@ class SongSheetApp(tk.Tk):
             )
         except FileNotFoundError:
             print("'image_files' directory not found.")
-
         self.all_media_files.sort()
         self._update_listbox(self.media_listbox, self.all_media_files)
 
@@ -538,7 +544,7 @@ class SongSheetApp(tk.Tk):
 
         filename = f"{song_title}.txt"
 
-        dest_folder = "txt_files"
+        dest_folder = "assets/txt_files"
         if not os.path.exists(dest_folder):
             os.makedirs(dest_folder)
 
