@@ -13,11 +13,7 @@ from PIL import Image, ImageTk
 from ucworship.image_automation_script import create_arabic_song_image
 
 package_dir = os.path.dirname(__file__)
-song_dest = os.path.join(package_dir, "assets", "txt_files")
-image_dest = os.path.join(package_dir, "assets", "image_files")
-
-
-package_dir = os.path.dirname(__file__)
+fonts_dir = os.path.join(package_dir, "assets", "fonts")
 song_dest = os.path.join(package_dir, "assets", "txt_files")
 image_dest = os.path.join(package_dir, "assets", "image_files")
 
@@ -81,9 +77,9 @@ class SongSheetApp(tk.Tk):
         self.zoom_start_y = 0
         self.zoom_rect_id = None
 
-        self.font_reg = "fonts/NotoNaskhArabic-Regular.ttf"
-        self.font_bold = "fonts/NotoNaskhArabic-Bold.ttf"
-        self.font_chord = "fonts/ARIAL.TTF"
+        self.font_reg = os.path.join(fonts_dir, "NotoNaskhArabic-Regular.ttf")
+        self.font_bold = os.path.join(fonts_dir, "NotoNaskhArabic-Bold.ttf")
+        self.font_chord = os.path.join(fonts_dir, "ARIAL.TTF")
 
         self.params = {
             "lyric_font_size": tk.IntVar(value=46),

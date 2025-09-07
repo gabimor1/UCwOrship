@@ -9,7 +9,8 @@ requires-python = ">= 3.11"
 
 dependencies = [
     "arabic-reshaper",
-    "python-bidi"
+    "python-bidi",
+    "pillow"
 ]
 
 [project.optional-dependencies]
