@@ -1,0 +1,50 @@
+---
+default_language_version:
+  python: python3.11
+
+exclude: 'backup/.*'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Check for files that would conflict in case-insensitive filesystems
+      - id: check-case-conflict
+      # Check for files that contain merge conflict strings
+      - id: check-merge-conflict
+      # Check Python source for debugger imports and py37+ `breakpoint()`
+      - id: debug-statements
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.8
+    hooks:
+      - id: ruff
+        args: ["--fix", "--exit-non-zero-on-fix"]
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: pylint
+        name: pylint
+        entry: pylint
+        language: python
+        types: [python]
+        additional_dependencies: ['pylint==3.3.7', pylint-pydantic]
+        args:
+          [
+            "-rn",  # Only display messages
+            "-sn"  # Don't display the score
+          ]
+#  - repo: https://github.com/pre-commit/mirrors-mypy
+#    rev: 'v1.16.0'
+#    hooks:
+#      - id: mypy
+#        args: [--config-file=pyproject.toml, ucworship/]
+#        pass_filenames: false
+#  - repo: local
+#    hooks:
+#      - id: pyright
+#        name: pyright
+#        entry: pyright
+#        language: node
+#        pass_filenames: false
+#        types: [python]
+#        additional_dependencies: ['pyright@1.1.400']
