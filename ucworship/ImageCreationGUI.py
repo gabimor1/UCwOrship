@@ -17,7 +17,6 @@ song_dest = os.path.join(package_dir, "assets", "txt_files")
 image_dest = os.path.join(package_dir, "assets", "image_files")
 
 
-
 package_dir = os.path.dirname(__file__)
 song_dest = os.path.join(package_dir, "assets", "txt_files")
 image_dest = os.path.join(package_dir, "assets", "image_files")
