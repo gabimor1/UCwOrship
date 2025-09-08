@@ -31,6 +31,18 @@ Run the following command to install UCwOrship and its dependencies:
 pip3 install -e .
 ```
 
+**Note:** It is of course always a good idea to use a Python virtual environment. To use the standard method, run this before installing anything:
+```shell
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Then you can just run
+```shell
+pip install -e .
+```
+without specifying the version, as it is implied by the environment.
+
 _Hint: If you use PyCharm IDE, you might need to use the old editable mode for the IDE to resolve imports of `ucworship`.
 This is done by appending the flag `--config-settings editable_mode=compat` to the command above._
 
@@ -39,4 +51,9 @@ This is done by appending the flag `--config-settings editable_mode=compat` to t
 Run UCwOrship using
 ```shell
 python3 -m ucworship
+```
+
+If you are currently in an activated virtual environment, then you do not have to specify the Python version:
+```shell
+python -m ucworship
 ```
