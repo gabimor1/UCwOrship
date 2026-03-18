@@ -147,8 +147,15 @@ class MusicTheory:
 class SongSheetApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Song Sheet Generator")
+        self.title("UCwOrship")
         self.geometry("1200x800")
+
+        # Set app icon
+        _logo_path = os.path.join(_get_bundle_dir(), "assets", "logo.png")
+        if os.path.exists(_logo_path):
+            _logo_img = ImageTk.PhotoImage(Image.open(_logo_path))
+            self.iconphoto(True, _logo_img)
+            self._logo_img = _logo_img  # keep reference
 
         # --- Initialize State & Parameters ---
         self.all_media_files = []  # A single list for all songs and images
