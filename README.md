@@ -23,6 +23,20 @@ macOS will block the app on first open because it is not signed by the App Store
 
 You only need to do this once.
 
+### Windows: First Launch
+
+Windows Defender SmartScreen may warn you that the app is from an unknown publisher. To open it:
+
+1. Double-click `UCwOrship.exe`
+2. If a blue "Windows protected your PC" dialog appears, click **More info**
+3. Click **Run anyway**
+
+You only need to do this once. The app does not modify your system or connect to the internet.
+
+**Windows Defender / Antivirus:** Some antivirus programs flag PyInstaller-packaged apps as suspicious (false positive). If this happens:
+- Check the file in [VirusTotal](https://www.virustotal.com) to confirm it's safe
+- Add an exception for the `UCwOrship` folder in your antivirus settings
+
 ### Where are my files?
 
 Songs and images you add are stored in a writable folder outside the app, so they survive updates:
