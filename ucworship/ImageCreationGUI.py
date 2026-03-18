@@ -181,6 +181,7 @@ class SongSheetApp(tk.Tk):
         self.zoom_start_x = 0
         self.zoom_start_y = 0
         self.zoom_rect_id = None
+        self.zoom_crop = None  # (x1, y1, x2, y2) in pil_image pixel space
 
         self.font_reg = os.path.join(fonts_dir, "NotoNaskhArabic-Regular.ttf")
         self.font_bold = os.path.join(fonts_dir, "NotoNaskhArabic-Bold.ttf")
@@ -425,6 +426,7 @@ class SongSheetApp(tk.Tk):
         self.image_canvas.bind("<B1-Motion>", self._drag_zoom)
         self.image_canvas.bind("<ButtonRelease-1>", self._end_zoom)
         self.image_canvas.bind("<Double-Button-1>", self._reset_zoom)
+        self.bind("<Escape>", self._on_escape)
 
     def load_media_files(self):
         self.all_media_files = []
@@ -541,11 +543,11 @@ class SongSheetApp(tk.Tk):
         if is_static_image:
             if not self.pil_image:
                 return
+            self.zoom_crop = None
             self.is_zoomed = False
         else:  # Is a song
             if not self.current_song_data:
                 return
-            self.is_zoomed = False
             gui_params = {
                 key: var.get() if isinstance(var, (tk.IntVar, tk.BooleanVar)) else var
                 for key, var in self.params.items()
@@ -560,6 +562,15 @@ class SongSheetApp(tk.Tk):
             self.pil_image = create_arabic_song_image(song_data_for_render, gui_params)
             if not self.pil_image:
                 return
+            # Re-apply existing zoom to the freshly rendered image
+            if self.is_zoomed and self.zoom_crop:
+                cx1, cy1, cx2, cy2 = self.zoom_crop
+                src_w, src_h = self.pil_image.size
+                cx1, cy1 = max(0, cx1), max(0, cy1)
+                cx2, cy2 = min(src_w, cx2), min(src_h, cy2)
+                self.pil_image_zoomed = self.pil_image.crop((cx1, cy1, cx2, cy2))
+            else:
+                self.is_zoomed = False
 
         self._display_on_canvas(self.pil_image, self.image_canvas)
         self._update_projector_view()
@@ -980,9 +991,21 @@ class SongSheetApp(tk.Tk):
             self.projector_window = None
             self.projector_label = None
 
-    def _reset_zoom(self, event):
+    def _reset_zoom(self, event=None):
         self.is_zoomed = False
+        self.zoom_crop = None
+        self.pil_image_zoomed = None
+        self._display_on_canvas(self.pil_image, self.image_canvas)
         self._update_projector_view()
+
+    def _on_escape(self, event=None):
+        # Cancel in-progress drag without zooming
+        if self.zoom_rect_id:
+            self.image_canvas.delete(self.zoom_rect_id)
+            self.zoom_rect_id = None
+        # If already zoomed, reset it
+        elif self.is_zoomed:
+            self._reset_zoom()
 
     def _start_zoom(self, event):
         self.zoom_start_x = self.image_canvas.canvasx(event.x)
@@ -1058,6 +1081,7 @@ class SongSheetApp(tk.Tk):
             paste_y = inter_y1 - crop_y1
             zoomed_img.paste(patch, (paste_x, paste_y))
 
+        self.zoom_crop = (crop_x1, crop_y1, crop_x2, crop_y2)
         self.pil_image_zoomed = zoomed_img
         self.is_zoomed = True
 
