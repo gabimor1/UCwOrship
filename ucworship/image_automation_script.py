@@ -5,11 +5,151 @@ from bidi.algorithm import get_display
 from PIL import Image, ImageDraw, ImageFont
 
 
+def _is_arabic_text(text):
+    return any("\u0600" <= ch <= "\u06FF" for ch in text)
+
+
+def _detect_language(song_data):
+    for section in song_data:
+        if section["type"] == "lyrics_section":
+            for line in section["lines"]:
+                clean = re.sub(r"\[.*?\]", "", line)
+                if _is_arabic_text(clean):
+                    return "arabic"
+    return "english"
+
+
+def create_english_song_image(song_data, params):
+    """Generates a left-to-right song sheet image for English songs."""
+    scale_factor = 4
+    lyric_font_size = params["lyric_font_size"]
+    chord_font_size = params["chord_font_size"]
+    title_font_size = params["title_font_size"]
+    capo_font_size = params["capo_font_size"]
+    show_chords = params["show_chords"]
+    english_font_path = params["font_english"]
+    english_bold_font_path = params["font_english_bold"]
+    chord_font_path = params["font_chord"]
+
+    image_width = 1850
+    padding = 70
+    line_spacing = 18
+    section_spacing = 70
+
+    image_width_scaled = image_width * scale_factor
+    padding_scaled = padding * scale_factor
+    line_spacing_scaled = line_spacing * scale_factor
+    section_spacing_scaled = section_spacing * scale_factor
+
+    background_color = params.get("bg_color", (255, 255, 255))
+    text_color = params.get("text_color", (0, 0, 0))
+    chord_color = params.get("chord_color", (180, 180, 180))
+
+    try:
+        title_font = ImageFont.truetype(english_bold_font_path, title_font_size * scale_factor)
+        lyric_font = ImageFont.truetype(english_font_path, lyric_font_size * scale_factor)
+        bold_lyric_font = ImageFont.truetype(english_bold_font_path, lyric_font_size * scale_factor)
+        chord_font = ImageFont.truetype(chord_font_path, chord_font_size * scale_factor)
+        capo_font = ImageFont.truetype(english_font_path, capo_font_size * scale_factor)
+    except OSError as e:
+        print(f"Error loading font: {e}. Aborting.")
+        return None
+
+    temp_height = 4000 * scale_factor
+    img = Image.new("RGB", (image_width_scaled, temp_height), color=background_color)
+    draw = ImageDraw.Draw(img)
+    center_x = image_width_scaled / 2
+    y_position = padding_scaled / 3
+
+    for section in song_data:
+        sec_type = section["type"]
+
+        if sec_type == "title":
+            text = section["content"]
+            draw.text((center_x, y_position), text, font=title_font, fill=text_color, anchor="mt")
+            y_position += title_font.getbbox(text)[3] + line_spacing_scaled
+
+        elif sec_type == "capo":
+            capo_text = f"Capo: {params['capo']}"
+            draw.text(
+                (center_x, y_position), capo_text, font=capo_font, fill=text_color, anchor="mt"
+            )
+            y_position += capo_font.getbbox(capo_text)[3]
+
+        elif sec_type == "lyrics_section":
+            is_chorus = "chorus" in section["title"].lower()
+            current_lyric_font = bold_lyric_font if is_chorus else lyric_font
+
+            for line in section["lines"]:
+                clean_line = re.sub(r"\[.*?\]", "", line)
+                segments = [s for s in re.split(r"(\[.*?\])", line) if s]
+
+                total_lyric_width = draw.textlength(clean_line, font=current_lyric_font)
+                text_start_x = center_x - total_lyric_width / 2
+
+                chord_y = y_position
+                lyric_y = y_position + chord_font.getbbox("Cm")[3]
+
+                draw.text(
+                    (text_start_x, lyric_y),
+                    clean_line,
+                    font=current_lyric_font,
+                    fill=text_color,
+                    anchor="la",
+                )
+
+                if show_chords:
+                    x_cursor = text_start_x
+                    last_chord_end_x = -1
+
+                    for segment in segments:
+                        if not re.fullmatch(r"\[.*?\]", segment):
+                            x_cursor += draw.textlength(segment, font=current_lyric_font)
+                        else:
+                            chord_text = segment[1:-1]
+                            chord_width = draw.textlength(chord_text, font=chord_font)
+                            chord_x = x_cursor
+                            # Push right if overlapping with previous chord
+                            min_gap = chord_font_size * scale_factor * 0.3
+                            if chord_x < last_chord_end_x + min_gap:
+                                chord_x = last_chord_end_x + min_gap
+                            draw.text(
+                                (chord_x, chord_y),
+                                chord_text,
+                                font=chord_font,
+                                fill=chord_color,
+                                anchor="lt",
+                            )
+                            last_chord_end_x = chord_x + chord_width
+
+                y_position += (
+                    current_lyric_font.getbbox("Sample")[3]
+                    + chord_font.getbbox("Cm")[3]
+                    + line_spacing_scaled
+                )
+            y_position += section_spacing_scaled
+
+    final_height_px = int(y_position + padding_scaled)
+    final_image_scaled = img.crop((0, 0, image_width_scaled, final_height_px))
+    final_w = int(final_image_scaled.width / scale_factor)
+    final_h = int(final_image_scaled.height / scale_factor)
+
+    try:
+        resample_filter = Image.Resampling.LANCZOS
+    except AttributeError:
+        resample_filter = Image.LANCZOS
+
+    return final_image_scaled.resize((final_w, final_h), resample_filter)
+
+
 def create_arabic_song_image(song_data, params):
     """
-    Generates a right-to-left song sheet image from pre-parsed song data and GUI parameters.
-    This is your perfected logic, adapted to be called as a function.
+    Generates a song sheet image from pre-parsed song data and GUI parameters.
+    Automatically routes to English (LTR) or Arabic (RTL) rendering based on content.
     """
+    if _detect_language(song_data) == "english":
+        return create_english_song_image(song_data, params)
+
     debug = 0
 
     # --- 1. Unpack GUI Parameters ---
@@ -34,9 +174,9 @@ def create_arabic_song_image(song_data, params):
     line_spacing_scaled = line_spacing * scale_factor
     section_spacing_scaled = section_spacing * scale_factor
 
-    background_color = (255, 255, 255)
-    text_color = (0, 0, 0)
-    chord_color = (180, 180, 180)
+    background_color = params.get("bg_color", (255, 255, 255))
+    text_color = params.get("text_color", (0, 0, 0))
+    chord_color = params.get("chord_color", (180, 180, 180))
     # --- 3. Load Fonts (Scaled) ---
     try:
         title_font = ImageFont.truetype(arabic_bold_font_path, title_font_size * scale_factor)

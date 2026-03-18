@@ -21,35 +21,85 @@ image_dest = os.path.join(package_dir, "assets", "image_files")
 # --- 1. Music Theory Engine ---
 # This class handles all chord transpositions for scale and capo adjustments.
 class MusicTheory:
-    NOTES_SHARP = ["A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#"]
-    NOTES_FLAT = ["A", "Bb", "B", "C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab"]
+    CHROMATIC_SHARP = ["A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#"]
+    CHROMATIC_FLAT  = ["A", "Bb", "B", "C", "Db",  "D", "Eb",  "E", "F", "Gb",  "G", "Ab"]
+
+    @staticmethod
+    def _note_index(note):
+        """Return (semitone_index, prefer_flat) for a note string like 'A', 'Bb', 'C#'."""
+        if "#" in note:
+            return MusicTheory.CHROMATIC_SHARP.index(note), False
+        if "b" in note:
+            return MusicTheory.CHROMATIC_FLAT.index(note), True
+        # Natural note — same index in both scales
+        return MusicTheory.CHROMATIC_SHARP.index(note), False
+
+    @staticmethod
+    def _index_to_note(idx, prefer_flat):
+        """Return note name for a chromatic index, using flat or sharp based on preference."""
+        sharp = MusicTheory.CHROMATIC_SHARP[idx % 12]
+        flat  = MusicTheory.CHROMATIC_FLAT[idx % 12]
+        # Return flat only when preferred AND the note is actually an accidental (not natural)
+        return flat if (prefer_flat and flat != sharp) else sharp
+
+    @staticmethod
+    def _transpose_root(root, steps, prefer_flat):
+        """Transpose a single root note string by steps semitones."""
+        try:
+            idx, _ = MusicTheory._note_index(root)
+        except ValueError:
+            return root
+        return MusicTheory._index_to_note(idx + steps, prefer_flat)
 
     @staticmethod
     def transpose_chord(chord_str, steps):
+        """Transpose a full chord string by `steps` semitones.
+
+        Handles: Am, C#maj7, Bbsus4, G/B, F#m7b5, Dm7, Esus2, etc.
+        Preserves the flat/sharp preference of the original chord root.
+        Slash-chord bass notes (e.g. G/B) are also transposed.
+        """
         if not chord_str or steps == 0:
             return chord_str
 
-        print(chord_str)
-        match = re.match(r"([A-G][b#]?)", chord_str)
+        match = re.match(r"^([A-G][b#]?)(.*)", chord_str)
         if not match:
             return chord_str
 
         root = match.group(1)
-        quality = chord_str[len(root) :]
+        rest = match.group(2)
 
         try:
-            if "#" in root or (len(root) == 1 and root not in ["B", "E"]):
-                scale = MusicTheory.NOTES_SHARP
-                current_index = scale.index(root)
-            else:
-                scale = MusicTheory.NOTES_FLAT
-                current_index = scale.index(root)
+            idx, prefer_flat = MusicTheory._note_index(root)
         except ValueError:
             return chord_str
 
-        new_index = (current_index + steps) % 12
-        new_root = MusicTheory.NOTES_SHARP[new_index]  # Always return sharp for consistency
-        return new_root + quality
+        new_root = MusicTheory._index_to_note(idx + steps, prefer_flat)
+
+        # Handle slash chords: e.g. "G/B", "Am/E", "C#maj7/F"
+        slash_match = re.match(r"^(.*)/([A-G][b#]?)$", rest)
+        if slash_match:
+            quality = slash_match.group(1)
+            bass    = slash_match.group(2)
+            new_bass = MusicTheory._transpose_root(bass, steps, prefer_flat)
+            return f"{new_root}{quality}/{new_bass}"
+
+        return new_root + rest
+
+    @staticmethod
+    def transpose_line(line, steps):
+        """Transpose all [chord] tokens in a lyric line in a single pass.
+
+        Uses regex substitution to avoid the double-replacement bug that occurs
+        when two chords in the same line share an enharmonic name after transposition.
+        """
+        if steps == 0:
+            return line
+        return re.sub(
+            r"\[([A-G][b#]?[^\]]*)\]",
+            lambda m: f"[{MusicTheory.transpose_chord(m.group(1), steps)}]",
+            line,
+        )
 
 
 # --- 2. Main GUI Application ---
@@ -70,6 +120,20 @@ class SongSheetApp(tk.Tk):
         self.pil_image_zoomed = None  # To hold the currently zoomed image for the projector
         self.projector_window = None  # To hold the external projector window
         self.projector_label = None
+        self.projector_paused = False
+        self.dark_mode = False
+
+        # --- Theme Colors ---
+        self.LIGHT = {
+            "bg": (255, 255, 255), "text": (0, 0, 0), "chord": (180, 180, 180),
+            "ui_bg": "#F0F0F0", "ui_fg": "#000000", "list_bg": "#FFFFFF",
+            "list_sel": "#0078D7", "canvas_bg": "gray",
+        }
+        self.DARK = {
+            "bg": (28, 28, 28), "text": (240, 240, 240), "chord": (140, 140, 140),
+            "ui_bg": "#1C1C1C", "ui_fg": "#F0F0F0", "list_bg": "#2A2A2A",
+            "list_sel": "#4A90D9", "canvas_bg": "#111111",
+        }
 
         # --- Zoom State ---
         self.is_zoomed = False
@@ -80,6 +144,8 @@ class SongSheetApp(tk.Tk):
         self.font_reg = os.path.join(fonts_dir, "NotoNaskhArabic-Regular.ttf")
         self.font_bold = os.path.join(fonts_dir, "NotoNaskhArabic-Bold.ttf")
         self.font_chord = os.path.join(fonts_dir, "ARIAL.TTF")
+        self.font_english = os.path.join(fonts_dir, "ARIAL.TTF")
+        self.font_english_bold = os.path.join(fonts_dir, "arial", "ARIALBD.TTF")
 
         self.params = {
             "lyric_font_size": tk.IntVar(value=46),
@@ -93,7 +159,12 @@ class SongSheetApp(tk.Tk):
             "font_reg": self.font_reg,
             "font_bold": self.font_bold,
             "font_chord": self.font_chord,
+            "font_english": self.font_english,
+            "font_english_bold": self.font_english_bold,
             "transpose_steps": 0,
+            "bg_color": self.LIGHT["bg"],
+            "text_color": self.LIGHT["text"],
+            "chord_color": self.LIGHT["chord"],
         }
 
         # --- Create UI Layout ---
@@ -116,7 +187,7 @@ class SongSheetApp(tk.Tk):
 
         # --- Top Pane: Unified Media Browser ---
         browser_pane = ttk.Frame(main_paned_window, padding=5)
-        main_paned_window.add(browser_pane, weight=1)
+        main_paned_window.add(browser_pane, weight=3)
         self._populate_media_browser(browser_pane)
 
         # --- Bottom Pane: Session List ---
@@ -132,111 +203,141 @@ class SongSheetApp(tk.Tk):
     def _populate_media_browser(self, parent_frame):
         parent_frame.grid_rowconfigure(2, weight=1)
         parent_frame.grid_columnconfigure(0, weight=1)
-        ttk.Label(parent_frame, text="Media Library", font=("Helvetica", 12, "bold")).grid(
-            row=0, column=0, pady=5
+
+        ttk.Label(parent_frame, text="Media Library", font=("Helvetica", 13, "bold")).grid(
+            row=0, column=0, pady=(4, 2)
         )
+
+        # Search bar with placeholder hint
+        search_frame = ttk.Frame(parent_frame)
+        search_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=(2, 5))
+        search_frame.grid_columnconfigure(0, weight=1)
+        ttk.Label(search_frame, text="🔍").grid(row=0, column=0, sticky="w")
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", self._on_search)
-        search_entry = ttk.Entry(parent_frame, textvariable=self.search_var)
-        search_entry.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
-        self.media_listbox = tk.Listbox(parent_frame, exportselection=False)
+        search_entry = ttk.Entry(search_frame, textvariable=self.search_var, font=("Helvetica", 12))
+        search_entry.grid(row=1, column=0, sticky="ew", ipady=5)
+        search_entry.bind("<Control-a>", lambda e: (e.widget.select_range(0, tk.END), e.widget.icursor(tk.END)) or "break")
+
+        self.media_listbox = tk.Listbox(parent_frame, exportselection=False, font=("Helvetica", 11))
         self.media_listbox.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
         self.media_listbox.bind("<<ListboxSelect>>", self.on_media_select)
+        self.media_listbox.bind("<ButtonPress-1>", self._on_drag_start)
+        self.media_listbox.bind("<B1-Motion>", self._on_drag_motion)
+        self.media_listbox.bind("<ButtonRelease-1>", self._on_drag_release)
+        self._drag_item = None
+        self._drag_started = False
 
         # --- Action buttons for the browser ---
         button_frame = ttk.Frame(parent_frame)
-        button_frame.grid(row=3, column=0, sticky="ew", padx=5, pady=5)
+        button_frame.grid(row=3, column=0, sticky="ew", padx=5, pady=(2, 5))
         button_frame.grid_columnconfigure(0, weight=1)
         button_frame.grid_columnconfigure(1, weight=1)
-        button_frame.grid_columnconfigure(2, weight=1)
-        ttk.Button(button_frame, text="Add to Session ↓", command=self._add_to_session).grid(
-            row=0, column=0, sticky="ew", padx=2
+        ttk.Button(button_frame, text="＋ Add to Session", command=self._add_to_session).grid(
+            row=0, column=0, columnspan=2, sticky="ew", padx=2, pady=(0, 3), ipady=4
         )
-        ttk.Button(button_frame, text="Import Media...", command=self._import_files).grid(
-            row=0, column=1, sticky="ew", padx=2
+        ttk.Button(button_frame, text="📂 Import...", command=self._import_files).grid(
+            row=1, column=0, sticky="ew", padx=2, ipady=3
         )
-        ttk.Button(button_frame, text="Create Song...", command=self._create_new_song).grid(
-            row=0, column=2, sticky="ew", padx=2
+        ttk.Button(button_frame, text="✏️ New Song...", command=self._create_new_song).grid(
+            row=1, column=1, sticky="ew", padx=2, ipady=3
         )
 
     def _populate_session_list(self, parent_frame):
         parent_frame.grid_columnconfigure(0, weight=1)
         parent_frame.grid_rowconfigure(1, weight=1)
-        ttk.Label(parent_frame, text="Session List", font=("Helvetica", 12, "bold")).grid(
-            row=0, column=0, columnspan=2, pady=5
+        ttk.Label(parent_frame, text="Session", font=("Helvetica", 13, "bold")).grid(
+            row=0, column=0, pady=(4, 2)
         )
-        self.session_listbox = tk.Listbox(parent_frame, exportselection=False)
-        self.session_listbox.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
+        self.session_listbox = tk.Listbox(parent_frame, exportselection=False, font=("Helvetica", 11))
+        self.session_listbox.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         self.session_listbox.bind("<<ListboxSelect>>", self.on_session_item_select)
         session_buttons_frame = ttk.Frame(parent_frame)
-        session_buttons_frame.grid(row=2, column=0, columnspan=2, sticky="ew")
+        session_buttons_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=(0, 4))
         session_buttons_frame.grid_columnconfigure(0, weight=1)
         session_buttons_frame.grid_columnconfigure(1, weight=1)
-        session_buttons_frame.grid_columnconfigure(2, weight=1)
+        session_buttons_frame.grid_columnconfigure(2, weight=2)
         ttk.Button(session_buttons_frame, text="▲", command=lambda: self._move_in_session(-1)).grid(
-            row=0, column=0, sticky="ew"
+            row=0, column=0, sticky="ew", padx=2, ipady=3
         )
         ttk.Button(session_buttons_frame, text="▼", command=lambda: self._move_in_session(1)).grid(
-            row=0, column=1, sticky="ew"
+            row=0, column=1, sticky="ew", padx=2, ipady=3
         )
-        ttk.Button(session_buttons_frame, text="Remove", command=self._remove_from_session).grid(
-            row=0, column=2, sticky="ew"
+        ttk.Button(session_buttons_frame, text="🗑 Remove", command=self._remove_from_session).grid(
+            row=0, column=2, sticky="ew", padx=2, ipady=3
         )
 
     def _populate_parameter_controls(self):
-        ttk.Separator(self.parameter_controls_frame, orient="horizontal").pack(fill="x", pady=15)
-        ttk.Label(
-            self.parameter_controls_frame, text="Controls", font=("Helvetica", 14, "bold")
-        ).pack(pady=5)
-        self._create_slider(
-            self.parameter_controls_frame,
-            "Lyrics Font Size",
-            self.params["lyric_font_size"],
-            10,
-            80,
-        )
-        self._create_slider(
-            self.parameter_controls_frame, "Chords Font Size", self.params["chord_font_size"], 8, 50
-        )
+        f = self.parameter_controls_frame
+
+        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(10, 6))
+
+        # --- Capo + Scale side by side ---
+        transpose_frame = ttk.Frame(f)
+        transpose_frame.pack(fill="x", padx=5, pady=2)
+        transpose_frame.grid_columnconfigure(0, weight=1)
+        transpose_frame.grid_columnconfigure(1, weight=1)
+        self._create_stepper_grid(transpose_frame, "Capo", self.params["capo"], self.on_capo_change, col=0)
+        self._create_stepper_grid(transpose_frame, "Scale", self.params["scale_steps"], self.on_scale_change, col=1)
+
+        # --- Show Chords checkbox ---
         ttk.Checkbutton(
-            self.parameter_controls_frame,
-            text="Show Chords",
-            variable=self.params["show_chords"],
-            command=self.update_image,
-        ).pack(pady=10)
-        ttk.Separator(self.parameter_controls_frame, orient="horizontal").pack(fill="x", pady=15)
-        self._create_stepper(
-            self.parameter_controls_frame, "Capo", self.params["capo"], self.on_capo_change
+            f, text="Show Chords", variable=self.params["show_chords"], command=self.update_image
+        ).pack(pady=6)
+
+        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(6, 8))
+
+        # --- Song actions ---
+        song_frame = ttk.Frame(f)
+        song_frame.pack(fill="x", padx=5, pady=2)
+        song_frame.grid_columnconfigure(0, weight=1)
+        song_frame.grid_columnconfigure(1, weight=1)
+        self.set_default_button = ttk.Button(song_frame, text="Set as Default", command=self.set_as_default)
+        self.set_default_button.grid(row=0, column=0, sticky="ew", padx=2, ipady=5)
+        ttk.Button(song_frame, text="Export PNG", command=self.export_image).grid(
+            row=0, column=1, sticky="ew", padx=2, ipady=5
         )
-        self._create_stepper(
-            self.parameter_controls_frame, "Scale", self.params["scale_steps"], self.on_scale_change
-        )
-        ttk.Separator(self.parameter_controls_frame, orient="horizontal").pack(fill="x", pady=15)
-        action_frame = ttk.Frame(self.parameter_controls_frame)
-        action_frame.pack(fill="x", pady=5)
-        self.set_default_button = ttk.Button(
-            action_frame, text="Set as Default", command=self.set_as_default
-        )
-        self.set_default_button.pack(side="left", expand=True, fill="x", padx=2, ipady=5)
-        ttk.Button(action_frame, text="Export as PNG", command=self.export_image).pack(
-            side="left", expand=True, fill="x", padx=2, ipady=5
-        )
-        ttk.Button(action_frame, text="Open Projector", command=self.open_projector_window).pack(
-            side="left", expand=True, fill="x", padx=2, ipady=5
+
+        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(8, 6))
+
+        # --- Projector controls ---
+        proj_frame = ttk.Frame(f)
+        proj_frame.pack(fill="x", padx=5, pady=2)
+        proj_frame.grid_columnconfigure(0, weight=1)
+        proj_frame.grid_columnconfigure(1, weight=1)
+        self.projector_button = ttk.Button(proj_frame, text="▶ Open Projector", command=self.open_projector_window)
+        self.projector_button.grid(row=0, column=0, sticky="ew", padx=2, ipady=6)
+        self.pause_button = ttk.Button(proj_frame, text="⏸ Pause", command=self._toggle_projector_pause)
+        self.pause_button.grid(row=0, column=1, sticky="ew", padx=2, ipady=6)
+
+        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(8, 6))
+
+        # --- Bottom utilities ---
+        util_frame = ttk.Frame(f)
+        util_frame.pack(fill="x", padx=5, pady=2)
+        util_frame.grid_columnconfigure(0, weight=1)
+        util_frame.grid_columnconfigure(1, weight=1)
+        self.theme_button = ttk.Button(util_frame, text="🌙 Dark Mode", command=self._toggle_theme)
+        self.theme_button.grid(row=0, column=0, sticky="ew", padx=2, ipady=5)
+        ttk.Button(util_frame, text="Export All...", command=self._export_all_songs).grid(
+            row=0, column=1, sticky="ew", padx=2, ipady=5
         )
 
     def _toggle_controls(self, state):
         widget_state = [state] if state == "disabled" else ["!disabled"]
-        for child in self.parameter_controls_frame.winfo_children():
-            if hasattr(child, "state") and child != self.set_default_button:
-                child.state(widget_state)
-            if isinstance(child, ttk.Frame):
-                for sub_child in child.winfo_children():
-                    if hasattr(sub_child, "state"):
-                        sub_child.state(widget_state)
+        always_enabled = {self.set_default_button, self.projector_button, self.pause_button, self.theme_button}
+
+        def apply(widget):
+            for child in widget.winfo_children():
+                if hasattr(child, "state") and child not in always_enabled:
+                    child.state(widget_state)
+                apply(child)
+
+        apply(self.parameter_controls_frame)
         self.set_default_button.state(
             ["!disabled"] if self.current_mode == "song" else ["disabled"]
         )
+        self.projector_button.state(["!disabled"])
 
     def _create_slider(self, parent, label_text, variable, from_, to):
         frame = ttk.Frame(parent)
@@ -250,6 +351,17 @@ class SongSheetApp(tk.Tk):
             orient="horizontal",
             command=lambda e: self.update_image(),
         ).pack(side="right", fill="x", expand=True)
+
+    def _create_stepper_grid(self, parent, label_text, variable, command, col):
+        """Stepper widget placed in a grid cell (for side-by-side layout)."""
+        cell = ttk.Frame(parent)
+        cell.grid(row=0, column=col, sticky="ew", padx=4)
+        ttk.Label(cell, text=label_text, font=("Helvetica", 10, "bold")).pack()
+        row = ttk.Frame(cell)
+        row.pack()
+        ttk.Button(row, text="−", width=3, command=lambda: command(-1)).pack(side="left", padx=1)
+        ttk.Label(row, textvariable=variable, width=4, anchor="center").pack(side="left")
+        ttk.Button(row, text="+", width=3, command=lambda: command(1)).pack(side="left", padx=1)
 
     def _create_stepper(self, parent, label_text, variable, command):
         frame = ttk.Frame(parent)
@@ -438,14 +550,63 @@ class SongSheetApp(tk.Tk):
         )
         canvas_widget.image = tk_img
 
+    def _toggle_theme(self):
+        self.dark_mode = not self.dark_mode
+        theme = self.DARK if self.dark_mode else self.LIGHT
+        self.params["bg_color"] = theme["bg"]
+        self.params["text_color"] = theme["text"]
+        self.params["chord_color"] = theme["chord"]
+        self.theme_button.config(text="☀️ Light Mode" if self.dark_mode else "🌙 Dark Mode")
+        self._apply_ui_theme(theme)
+        if self.pil_image:
+            self.update_image(is_static_image=(self.current_mode == "image"))
+
+    def _apply_ui_theme(self, theme):
+        style = ttk.Style()
+        style.theme_use("clam")
+        bg = theme["ui_bg"]
+        fg = theme["ui_fg"]
+        list_bg = theme["list_bg"]
+        sel = theme["list_sel"]
+        style.configure(".", background=bg, foreground=fg, fieldbackground=list_bg,
+                         troughcolor=bg, bordercolor=bg)
+        style.configure("TFrame", background=bg)
+        style.configure("TLabel", background=bg, foreground=fg)
+        style.configure("TButton", background=bg, foreground=fg)
+        style.map("TButton", background=[("active", list_bg)])
+        style.configure("TCheckbutton", background=bg, foreground=fg)
+        style.configure("TScale", background=bg, troughcolor=list_bg)
+        style.configure("TSeparator", background=fg)
+        style.configure("TPanedwindow", background=bg)
+        self.configure(bg=bg)
+        self.image_canvas.config(bg=theme["canvas_bg"])
+        for lb in (self.media_listbox, self.session_listbox):
+            lb.config(bg=list_bg, fg=fg, selectbackground=sel,
+                      selectforeground=fg if self.dark_mode else "#FFFFFF")
+        if self.projector_window and self.projector_window.winfo_exists():
+            proj_bg = "#000000" if self.dark_mode else "#FFFFFF"
+            self.projector_window.configure(bg=proj_bg)
+            self.projector_label.config(bg=proj_bg)
+
+    def _toggle_projector_pause(self):
+        self.projector_paused = not self.projector_paused
+        if self.projector_paused:
+            self.pause_button.config(text="▶ Resume Projector")
+        else:
+            self.pause_button.config(text="⏸ Pause Projector")
+            self._update_projector_view()  # immediately push current image on resume
+
     def _update_projector_view(self):
         if not (self.projector_window and self.projector_window.winfo_exists()):
+            return
+        if self.projector_paused:
             return
         image_to_show = self.pil_image_zoomed if self.is_zoomed else self.pil_image
         if image_to_show:
             self._display_on_canvas(image_to_show, self.projector_label)
 
     def _get_transposed_song_data(self, gui_params):
+        steps = gui_params["transpose_steps"]
         song_data_for_render = []
         for section in self.current_song_data:
             if section["type"] != "lyrics_section":
@@ -453,18 +614,9 @@ class SongSheetApp(tk.Tk):
             else:
                 new_section = {"type": "lyrics_section", "title": section["title"], "lines": []}
                 for line_info in section["lines"]:
-                    transposed_line = line_info["line"]
-                    transposed_chords = [
-                        MusicTheory.transpose_chord(c, gui_params["transpose_steps"])
-                        for c in line_info["chords"]
-                    ]
-                    for original, transposed in zip(
-                        line_info["chords"], transposed_chords, strict=False
-                    ):
-                        transposed_line = transposed_line.replace(
-                            f"[{original}]", f"[{transposed}]", 1
-                        )
-                    new_section["lines"].append(transposed_line)
+                    new_section["lines"].append(
+                        MusicTheory.transpose_line(line_info["line"], steps)
+                    )
                 song_data_for_render.append(new_section)
         return song_data_for_render
 
@@ -539,11 +691,10 @@ class SongSheetApp(tk.Tk):
 
         filename = f"{song_title}.txt"
 
-        dest_folder = "assets/txt_files"
-        if not os.path.exists(dest_folder):
-            os.makedirs(dest_folder)
+        if not os.path.exists(song_dest):
+            os.makedirs(song_dest)
 
-        filepath = os.path.join(dest_folder, filename)
+        filepath = os.path.join(song_dest, filename)
 
         if os.path.exists(filepath):
             messagebox.showerror("Error", f"A song named '{filename}' already exists.")
@@ -564,6 +715,14 @@ class SongSheetApp(tk.Tk):
                 f.write(template)
 
             self.load_media_files()
+
+            # Auto-select the new song in the list
+            items = list(self.media_listbox.get(0, tk.END))
+            if filename in items:
+                idx = items.index(filename)
+                self.media_listbox.selection_set(idx)
+                self.media_listbox.see(idx)
+                self._process_selection(self.media_listbox)
 
             if sys.platform == "win32":
                 os.startfile(filepath)
@@ -608,12 +767,7 @@ class SongSheetApp(tk.Tk):
             elif re.search(r"\[.*?\]", stripped_line) and not re.fullmatch(
                 r"\[.*?\]", stripped_line
             ):
-                original_chords = re.findall(r"\[(.*?)\]", stripped_line)
-                new_line = stripped_line
-                for chord in original_chords:
-                    transposed = MusicTheory.transpose_chord(chord, transpose_steps)
-                    new_line = new_line.replace(f"[{chord}]", f"[{transposed}]", 1)
-                new_lines.append(new_line + "\n")
+                new_lines.append(MusicTheory.transpose_line(stripped_line, transpose_steps) + "\n")
             else:
                 new_lines.append(line)
 
@@ -628,6 +782,84 @@ class SongSheetApp(tk.Tk):
 
         except Exception as e:
             print(f"Error updating file: {e}")
+
+    def _on_drag_start(self, event):
+        self._drag_item = None
+        self._drag_started = False
+        self._drag_start_x = event.x
+        self._drag_start_y = event.y
+        # Read selection after the listbox finishes processing the click
+        self.after_idle(self._record_drag_item)
+
+    def _record_drag_item(self):
+        sel = self.media_listbox.curselection()
+        if sel:
+            self._drag_item = self.media_listbox.get(sel[0])
+
+    def _on_drag_motion(self, event):
+        if not self._drag_started and self._drag_item:
+            dx = abs(event.x - self._drag_start_x)
+            dy = abs(event.y - self._drag_start_y)
+            if dx > 8 or dy > 8:
+                self._drag_started = True
+                self.media_listbox.config(cursor="fleur")
+
+    def _on_drag_release(self, event):
+        self.media_listbox.config(cursor="")
+        if not self._drag_started or not self._drag_item:
+            self._drag_started = False
+            self._drag_item = None
+            return
+        x_root = event.widget.winfo_rootx() + event.x
+        y_root = event.widget.winfo_rooty() + event.y
+        slb = self.session_listbox
+        if (
+            slb.winfo_rootx() <= x_root <= slb.winfo_rootx() + slb.winfo_width()
+            and slb.winfo_rooty() <= y_root <= slb.winfo_rooty() + slb.winfo_height()
+        ):
+            if self._drag_item not in self.session_listbox.get(0, tk.END):
+                self.session_listbox.insert(tk.END, self._drag_item)
+        self._drag_started = False
+        self._drag_item = None
+
+    def _export_all_songs(self):
+        output_dir = filedialog.askdirectory(title="Select Output Directory for Song Images")
+        if not output_dir:
+            return
+
+        txt_files = [f for f in self.all_media_files if f.endswith(".txt")]
+        if not txt_files:
+            messagebox.showinfo("Export All", "No song files found.")
+            return
+
+        gui_params = {
+            key: var.get() if isinstance(var, (tk.IntVar, tk.BooleanVar)) else var
+            for key, var in self.params.items()
+        }
+        gui_params["transpose_steps"] = 0
+
+        success, errors = 0, []
+        for filename in txt_files:
+            try:
+                file_path = os.path.join(song_dest, filename)
+                self._parse_song_file(file_path)
+                img = create_arabic_song_image(self.current_song_data, gui_params)
+                if img:
+                    out_path = os.path.join(output_dir, os.path.splitext(filename)[0] + ".png")
+                    img.save(out_path)
+                    success += 1
+            except Exception as e:
+                errors.append(f"{filename}: {e}")
+
+        msg = f"Exported {success} of {len(txt_files)} songs to:\n{output_dir}"
+        if errors:
+            msg += f"\n\nFailed ({len(errors)}):\n" + "\n".join(errors)
+        messagebox.showinfo("Export All Songs", msg)
+
+        # Restore the previously selected song
+        if self.current_file_path:
+            self._parse_song_file(self.current_file_path)
+            self.update_image()
 
     def open_projector_window(self):
         if self.projector_window and self.projector_window.winfo_exists():
@@ -710,7 +942,27 @@ class SongSheetApp(tk.Tk):
         crop_x2 = crop_x1 + int(abs(x1 - x2) * ratio)
         crop_y2 = crop_y1 + int(abs(y1 - y2) * ratio)
 
-        self.pil_image_zoomed = self.pil_image.crop((crop_x1, crop_y1, crop_x2, crop_y2))
+        # Handle out-of-bounds zooming (panning past edges) with white background
+        desired_w = crop_x2 - crop_x1
+        desired_h = crop_y2 - crop_y1
+        
+        # Create a white background image of the desired size
+        zoomed_img = Image.new("RGB", (desired_w, desired_h), (255, 255, 255))
+        
+        # Calculate intersection with the actual image
+        src_w, src_h = self.pil_image.size
+        inter_x1 = max(0, crop_x1)
+        inter_y1 = max(0, crop_y1)
+        inter_x2 = min(src_w, crop_x2)
+        inter_y2 = min(src_h, crop_y2)
+        
+        if inter_x2 > inter_x1 and inter_y2 > inter_y1:
+            patch = self.pil_image.crop((inter_x1, inter_y1, inter_x2, inter_y2))
+            paste_x = inter_x1 - crop_x1
+            paste_y = inter_y1 - crop_y1
+            zoomed_img.paste(patch, (paste_x, paste_y))
+
+        self.pil_image_zoomed = zoomed_img
         self.is_zoomed = True
 
         self._update_projector_view()
