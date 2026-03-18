@@ -167,6 +167,9 @@ class SongSheetApp(tk.Tk):
             "chord_color": self.LIGHT["chord"],
         }
 
+        # --- Set base theme once so toggling colors never changes button shapes ---
+        ttk.Style().theme_use("clam")
+
         # --- Create UI Layout ---
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=3)
@@ -187,7 +190,7 @@ class SongSheetApp(tk.Tk):
 
         # --- Top Pane: Unified Media Browser ---
         browser_pane = ttk.Frame(main_paned_window, padding=5)
-        main_paned_window.add(browser_pane, weight=3)
+        main_paned_window.add(browser_pane, weight=5)
         self._populate_media_browser(browser_pane)
 
         # --- Bottom Pane: Session List ---
@@ -219,7 +222,7 @@ class SongSheetApp(tk.Tk):
         search_entry.grid(row=1, column=0, sticky="ew", ipady=5)
         search_entry.bind("<Control-a>", lambda e: (e.widget.select_range(0, tk.END), e.widget.icursor(tk.END)) or "break")
 
-        self.media_listbox = tk.Listbox(parent_frame, exportselection=False, font=("Helvetica", 11))
+        self.media_listbox = tk.Listbox(parent_frame, exportselection=False, font=("Helvetica", 13))
         self.media_listbox.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
         self.media_listbox.bind("<<ListboxSelect>>", self.on_media_select)
         self.media_listbox.bind("<ButtonPress-1>", self._on_drag_start)
@@ -234,47 +237,47 @@ class SongSheetApp(tk.Tk):
         button_frame.grid_columnconfigure(0, weight=1)
         button_frame.grid_columnconfigure(1, weight=1)
         ttk.Button(button_frame, text="＋ Add to Session", command=self._add_to_session).grid(
-            row=0, column=0, columnspan=2, sticky="ew", padx=2, pady=(0, 3), ipady=4
+            row=0, column=0, columnspan=2, sticky="ew", padx=2, pady=(0, 2), ipady=2
         )
         ttk.Button(button_frame, text="📂 Import...", command=self._import_files).grid(
-            row=1, column=0, sticky="ew", padx=2, ipady=3
+            row=1, column=0, sticky="ew", padx=2, ipady=2
         )
         ttk.Button(button_frame, text="✏️ New Song...", command=self._create_new_song).grid(
-            row=1, column=1, sticky="ew", padx=2, ipady=3
+            row=1, column=1, sticky="ew", padx=2, ipady=2
         )
 
     def _populate_session_list(self, parent_frame):
         parent_frame.grid_columnconfigure(0, weight=1)
         parent_frame.grid_rowconfigure(1, weight=1)
-        ttk.Label(parent_frame, text="Session", font=("Helvetica", 13, "bold")).grid(
-            row=0, column=0, pady=(4, 2)
+        ttk.Label(parent_frame, text="Session", font=("Helvetica", 11, "bold")).grid(
+            row=0, column=0, pady=(2, 1)
         )
-        self.session_listbox = tk.Listbox(parent_frame, exportselection=False, font=("Helvetica", 11))
-        self.session_listbox.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        self.session_listbox = tk.Listbox(parent_frame, exportselection=False, font=("Helvetica", 12))
+        self.session_listbox.grid(row=1, column=0, sticky="nsew", padx=5, pady=2)
         self.session_listbox.bind("<<ListboxSelect>>", self.on_session_item_select)
         session_buttons_frame = ttk.Frame(parent_frame)
-        session_buttons_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=(0, 4))
+        session_buttons_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=(1, 2))
         session_buttons_frame.grid_columnconfigure(0, weight=1)
         session_buttons_frame.grid_columnconfigure(1, weight=1)
         session_buttons_frame.grid_columnconfigure(2, weight=2)
         ttk.Button(session_buttons_frame, text="▲", command=lambda: self._move_in_session(-1)).grid(
-            row=0, column=0, sticky="ew", padx=2, ipady=3
+            row=0, column=0, sticky="ew", padx=2, ipady=1
         )
         ttk.Button(session_buttons_frame, text="▼", command=lambda: self._move_in_session(1)).grid(
-            row=0, column=1, sticky="ew", padx=2, ipady=3
+            row=0, column=1, sticky="ew", padx=2, ipady=1
         )
         ttk.Button(session_buttons_frame, text="🗑 Remove", command=self._remove_from_session).grid(
-            row=0, column=2, sticky="ew", padx=2, ipady=3
+            row=0, column=2, sticky="ew", padx=2, ipady=1
         )
 
     def _populate_parameter_controls(self):
         f = self.parameter_controls_frame
 
-        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(10, 6))
+        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(6, 4))
 
         # --- Capo + Scale side by side ---
         transpose_frame = ttk.Frame(f)
-        transpose_frame.pack(fill="x", padx=5, pady=2)
+        transpose_frame.pack(fill="x", padx=5, pady=1)
         transpose_frame.grid_columnconfigure(0, weight=1)
         transpose_frame.grid_columnconfigure(1, weight=1)
         self._create_stepper_grid(transpose_frame, "Capo", self.params["capo"], self.on_capo_change, col=0)
@@ -283,44 +286,44 @@ class SongSheetApp(tk.Tk):
         # --- Show Chords checkbox ---
         ttk.Checkbutton(
             f, text="Show Chords", variable=self.params["show_chords"], command=self.update_image
-        ).pack(pady=6)
+        ).pack(pady=3)
 
-        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(6, 8))
+        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(3, 4))
 
         # --- Song actions ---
         song_frame = ttk.Frame(f)
-        song_frame.pack(fill="x", padx=5, pady=2)
+        song_frame.pack(fill="x", padx=5, pady=1)
         song_frame.grid_columnconfigure(0, weight=1)
         song_frame.grid_columnconfigure(1, weight=1)
         self.set_default_button = ttk.Button(song_frame, text="Set as Default", command=self.set_as_default)
-        self.set_default_button.grid(row=0, column=0, sticky="ew", padx=2, ipady=5)
+        self.set_default_button.grid(row=0, column=0, sticky="ew", padx=2, ipady=3)
         ttk.Button(song_frame, text="Export PNG", command=self.export_image).grid(
-            row=0, column=1, sticky="ew", padx=2, ipady=5
+            row=0, column=1, sticky="ew", padx=2, ipady=3
         )
 
-        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(8, 6))
+        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(4, 4))
 
         # --- Projector controls ---
         proj_frame = ttk.Frame(f)
-        proj_frame.pack(fill="x", padx=5, pady=2)
+        proj_frame.pack(fill="x", padx=5, pady=1)
         proj_frame.grid_columnconfigure(0, weight=1)
         proj_frame.grid_columnconfigure(1, weight=1)
         self.projector_button = ttk.Button(proj_frame, text="▶ Open Projector", command=self.open_projector_window)
-        self.projector_button.grid(row=0, column=0, sticky="ew", padx=2, ipady=6)
+        self.projector_button.grid(row=0, column=0, sticky="ew", padx=2, ipady=4)
         self.pause_button = ttk.Button(proj_frame, text="⏸ Pause", command=self._toggle_projector_pause)
-        self.pause_button.grid(row=0, column=1, sticky="ew", padx=2, ipady=6)
+        self.pause_button.grid(row=0, column=1, sticky="ew", padx=2, ipady=4)
 
-        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(8, 6))
+        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(4, 4))
 
         # --- Bottom utilities ---
         util_frame = ttk.Frame(f)
-        util_frame.pack(fill="x", padx=5, pady=2)
+        util_frame.pack(fill="x", padx=5, pady=1)
         util_frame.grid_columnconfigure(0, weight=1)
         util_frame.grid_columnconfigure(1, weight=1)
         self.theme_button = ttk.Button(util_frame, text="🌙 Dark Mode", command=self._toggle_theme)
-        self.theme_button.grid(row=0, column=0, sticky="ew", padx=2, ipady=5)
+        self.theme_button.grid(row=0, column=0, sticky="ew", padx=2, ipady=3)
         ttk.Button(util_frame, text="Export All...", command=self._export_all_songs).grid(
-            row=0, column=1, sticky="ew", padx=2, ipady=5
+            row=0, column=1, sticky="ew", padx=2, ipady=3
         )
 
     def _toggle_controls(self, state):
@@ -563,7 +566,6 @@ class SongSheetApp(tk.Tk):
 
     def _apply_ui_theme(self, theme):
         style = ttk.Style()
-        style.theme_use("clam")
         bg = theme["ui_bg"]
         fg = theme["ui_fg"]
         list_bg = theme["list_bg"]
