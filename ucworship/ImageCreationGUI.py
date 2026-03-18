@@ -645,6 +645,8 @@ class SongSheetApp(tk.Tk):
                 "capo": self.params["capo"].get(),
                 "scale_steps": self.params["scale_steps"].get(),
                 "pil_image": self.pil_image,
+                "is_zoomed": self.is_zoomed,
+                "pil_image_zoomed": self.pil_image_zoomed,
             }
             # Show the return button right after the pause button's separator
             self.return_button.pack(fill="x", padx=5, pady=(2, 0), ipady=4,
@@ -675,6 +677,9 @@ class SongSheetApp(tk.Tk):
                     lb.see(idx)
                     self._process_selection(lb)
                     break
+        # Restore zoom state
+        self.is_zoomed = snap.get("is_zoomed", False)
+        self.pil_image_zoomed = snap.get("pil_image_zoomed")
         # Resume projector (clears snapshot + hides return button)
         self.projector_paused = True   # trick _toggle to resume
         self._toggle_projector_pause()
