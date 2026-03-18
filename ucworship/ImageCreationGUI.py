@@ -576,6 +576,8 @@ class SongSheetApp(tk.Tk):
         self.update_image()
 
     def update_image(self, is_static_image=False):
+        gui_params = {}
+        song_data_for_render = []
         if is_static_image:
             if not self.pil_image:
                 return
@@ -610,7 +612,15 @@ class SongSheetApp(tk.Tk):
 
         self._display_on_canvas(self.pil_image, self.image_canvas)
         self._update_projector_view()
-        web_server.push_image(self.pil_image, title=self.current_media_name or "",
+
+        # Web app always shows chords for musicians, regardless of main display setting
+        if not is_static_image and not gui_params.get("show_chords", True):
+            web_params = dict(gui_params)
+            web_params["show_chords"] = True
+            web_image = create_arabic_song_image(song_data_for_render, web_params)
+        else:
+            web_image = self.pil_image
+        web_server.push_image(web_image, title=self.current_media_name or "",
                               slide_type="image" if is_static_image else "song")
 
     def _display_on_canvas(self, pil_img, canvas_widget):
