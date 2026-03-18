@@ -37,6 +37,10 @@ You only need to do this once. The app does not modify your system or connect to
 - Check the file in [VirusTotal](https://www.virustotal.com) to confirm it's safe
 - Add an exception for the `UCwOrship` folder in your antivirus settings
 
+**Windows Firewall (Musician Web App):** When the app starts its local web server for the first time, Windows Firewall may ask whether to allow network access. Click **Allow access** so musicians on the same WiFi network can connect. If you accidentally blocked it:
+1. Open **Windows Defender Firewall** → **Allow an app through firewall**
+2. Find `UCwOrship` and check both **Private** and **Public** boxes
+
 ### Where are my files?
 
 Songs and images you add are stored in a writable folder outside the app, so they survive updates:
