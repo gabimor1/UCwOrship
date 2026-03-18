@@ -15,7 +15,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pre-commit"
+    "pre-commit",
+    "pyinstaller"
 ]
 test = [
     "pytest",
@@ -26,7 +27,7 @@ test = [
 include = ["ucworship*"]
 
 [tool.setuptools.package-data]
-"ucworship" = ["assets/*"]
+"ucworship" = ["assets/**/*"]
 
 # Assume Python 3.11
 [tool.ruff]

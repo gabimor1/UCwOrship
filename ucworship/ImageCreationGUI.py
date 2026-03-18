@@ -12,10 +12,50 @@ from PIL import Image, ImageTk
 # Make sure 'image_automation_script.py' is in the same folder.
 from ucworship.image_automation_script import create_arabic_song_image
 
-package_dir = os.path.dirname(__file__)
-fonts_dir = os.path.join(package_dir, "assets", "fonts")
-song_dest = os.path.join(package_dir, "assets", "txt_files")
-image_dest = os.path.join(package_dir, "assets", "image_files")
+def _get_bundle_dir():
+    """Read-only assets (fonts, bundled defaults) — inside the frozen bundle or source tree."""
+    if getattr(sys, "frozen", False):
+        return sys._MEIPASS
+    return os.path.dirname(__file__)
+
+
+def _get_data_dir():
+    """User-writable data directory (songs, imported images)."""
+    if getattr(sys, "frozen", False):
+        if sys.platform == "darwin":
+            return os.path.expanduser("~/Library/Application Support/UCwOrship")
+        if sys.platform == "win32":
+            return os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "UCwOrship")
+        return os.path.expanduser("~/.local/share/UCwOrship")
+    return os.path.dirname(__file__)
+
+
+def _init_user_data(bundle_dir: str, data_dir: str):
+    """On first run as a frozen app, copy bundled default songs to the user data dir."""
+    songs_dir = os.path.join(data_dir, "assets", "txt_files")
+    images_dir = os.path.join(data_dir, "assets", "image_files")
+    os.makedirs(songs_dir, exist_ok=True)
+    os.makedirs(images_dir, exist_ok=True)
+
+    if bundle_dir == data_dir:
+        return  # development mode — nothing to copy
+
+    for src_subdir, dst_subdir in [("txt_files", songs_dir), ("image_files", images_dir)]:
+        src = os.path.join(bundle_dir, "assets", src_subdir)
+        if os.path.isdir(src):
+            for fname in os.listdir(src):
+                dest = os.path.join(dst_subdir, fname)
+                if not os.path.exists(dest):
+                    shutil.copy(os.path.join(src, fname), dest)
+
+
+_bundle_dir = _get_bundle_dir()
+_data_dir = _get_data_dir()
+_init_user_data(_bundle_dir, _data_dir)
+
+fonts_dir = os.path.join(_bundle_dir, "assets", "fonts")
+song_dest = os.path.join(_data_dir, "assets", "txt_files")
+image_dest = os.path.join(_data_dir, "assets", "image_files")
 
 
 # --- 1. Music Theory Engine ---
@@ -122,6 +162,7 @@ class SongSheetApp(tk.Tk):
         self.projector_label = None
         self.projector_paused = False
         self.dark_mode = False
+        self._pre_pause_snapshot = None  # saved state when pause is pressed
 
         # --- Theme Colors ---
         self.LIGHT = {
@@ -312,6 +353,8 @@ class SongSheetApp(tk.Tk):
         self.projector_button.grid(row=0, column=0, sticky="ew", padx=2, ipady=4)
         self.pause_button = ttk.Button(proj_frame, text="⏸ Pause", command=self._toggle_projector_pause)
         self.pause_button.grid(row=0, column=1, sticky="ew", padx=2, ipady=4)
+        self.return_button = ttk.Button(f, text="↩ Return to Previous", command=self._return_to_pre_pause)
+        # shown only while paused — pack_forget keeps it hidden initially
 
         ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(4, 4))
 
@@ -328,7 +371,7 @@ class SongSheetApp(tk.Tk):
 
     def _toggle_controls(self, state):
         widget_state = [state] if state == "disabled" else ["!disabled"]
-        always_enabled = {self.set_default_button, self.projector_button, self.pause_button, self.theme_button}
+        always_enabled = {self.set_default_button, self.projector_button, self.pause_button, self.theme_button, self.return_button}
 
         def apply(widget):
             for child in widget.winfo_children():
@@ -593,10 +636,48 @@ class SongSheetApp(tk.Tk):
     def _toggle_projector_pause(self):
         self.projector_paused = not self.projector_paused
         if self.projector_paused:
-            self.pause_button.config(text="▶ Resume Projector")
+            self.pause_button.config(text="▶ Resume")
+            # Save current state so the user can return to it
+            self._pre_pause_snapshot = {
+                "file_path": self.current_file_path,
+                "media_name": self.current_media_name,
+                "mode": self.current_mode,
+                "capo": self.params["capo"].get(),
+                "scale_steps": self.params["scale_steps"].get(),
+                "pil_image": self.pil_image,
+            }
+            # Show the return button right after the pause button's separator
+            self.return_button.pack(fill="x", padx=5, pady=(2, 0), ipady=4,
+                                    after=self.pause_button.master)
         else:
-            self.pause_button.config(text="⏸ Pause Projector")
-            self._update_projector_view()  # immediately push current image on resume
+            self.pause_button.config(text="⏸ Pause")
+            self._pre_pause_snapshot = None
+            self.return_button.pack_forget()
+            self._update_projector_view()  # push current preview to projector on resume
+
+    def _return_to_pre_pause(self):
+        """Restore the state that was active when Pause was pressed, then resume."""
+        snap = self._pre_pause_snapshot
+        if not snap:
+            return
+        # Restore params
+        self.params["capo"].set(snap["capo"])
+        self.params["scale_steps"].set(snap["scale_steps"])
+        # Re-select the item in whichever listbox it lives in
+        filename = os.path.basename(snap["file_path"]) if snap["file_path"] else None
+        if filename:
+            for lb in (self.media_listbox, self.session_listbox):
+                items = list(lb.get(0, tk.END))
+                if filename in items:
+                    idx = items.index(filename)
+                    lb.selection_clear(0, tk.END)
+                    lb.selection_set(idx)
+                    lb.see(idx)
+                    self._process_selection(lb)
+                    break
+        # Resume projector (clears snapshot + hides return button)
+        self.projector_paused = True   # trick _toggle to resume
+        self._toggle_projector_pause()
 
     def _update_projector_view(self):
         if not (self.projector_window and self.projector_window.winfo_exists()):
@@ -834,18 +915,25 @@ class SongSheetApp(tk.Tk):
             messagebox.showinfo("Export All", "No song files found.")
             return
 
-        gui_params = {
+        # Capture base params (fonts, colors, show_chords, etc.) — capo will be set per song
+        base_params = {
             key: var.get() if isinstance(var, (tk.IntVar, tk.BooleanVar)) else var
             for key, var in self.params.items()
         }
-        gui_params["transpose_steps"] = 0
+        base_params["scale_steps"] = 0
+        base_params["transpose_steps"] = 0
 
         success, errors = 0, []
         for filename in txt_files:
             try:
                 file_path = os.path.join(song_dest, filename)
                 self._parse_song_file(file_path)
-                img = create_arabic_song_image(self.current_song_data, gui_params)
+                # Build per-song params with this file's actual capo
+                song_params = dict(base_params)
+                song_params["capo"] = self.params["capo"].get()
+                # Convert raw song data (dicts) to render-ready strings via _get_transposed_song_data
+                song_data_for_render = self._get_transposed_song_data(song_params)
+                img = create_arabic_song_image(song_data_for_render, song_params)
                 if img:
                     out_path = os.path.join(output_dir, os.path.splitext(filename)[0] + ".png")
                     img.save(out_path)
@@ -858,9 +946,10 @@ class SongSheetApp(tk.Tk):
             msg += f"\n\nFailed ({len(errors)}):\n" + "\n".join(errors)
         messagebox.showinfo("Export All Songs", msg)
 
-        # Restore the previously selected song
+        # Restore the previously selected song state
         if self.current_file_path:
             self._parse_song_file(self.current_file_path)
+            self.params["scale_steps"].set(0)
             self.update_image()
 
     def open_projector_window(self):
