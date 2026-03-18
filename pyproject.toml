@@ -10,7 +10,9 @@ requires-python = ">= 3.11"
 dependencies = [
     "arabic-reshaper",
     "python-bidi",
-    "pillow"
+    "pillow",
+    "flask>=3.0",
+    "qrcode[pil]>=7.4",
 ]
 
 [project.optional-dependencies]

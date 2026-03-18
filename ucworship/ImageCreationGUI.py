@@ -11,6 +11,7 @@ from PIL import Image, ImageTk
 # This line IMPORTS your perfected image creation function from your script.
 # Make sure 'image_automation_script.py' is in the same folder.
 from ucworship.image_automation_script import create_arabic_song_image
+from ucworship import web_server
 
 def _get_bundle_dir():
     """Read-only assets (fonts, bundled defaults) — inside the frozen bundle or source tree."""
@@ -219,6 +220,7 @@ class SongSheetApp(tk.Tk):
         self._create_controls_panel()
         self._create_image_panel()
         self.load_media_files()
+        self.after(500, self._start_web_server)
 
     def _create_controls_panel(self):
         controls_frame = ttk.Frame(self, padding="10")
@@ -317,13 +319,16 @@ class SongSheetApp(tk.Tk):
 
         ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(6, 4))
 
-        # --- Capo + Scale side by side ---
+        # --- Capo | QR | Scale ---
         transpose_frame = ttk.Frame(f)
         transpose_frame.pack(fill="x", padx=5, pady=1)
         transpose_frame.grid_columnconfigure(0, weight=1)
-        transpose_frame.grid_columnconfigure(1, weight=1)
+        transpose_frame.grid_columnconfigure(1, weight=0)
+        transpose_frame.grid_columnconfigure(2, weight=1)
         self._create_stepper_grid(transpose_frame, "Capo", self.params["capo"], self.on_capo_change, col=0)
-        self._create_stepper_grid(transpose_frame, "Scale", self.params["scale_steps"], self.on_scale_change, col=1)
+        self.web_qr_canvas = tk.Canvas(transpose_frame, width=80, height=80, highlightthickness=0)
+        self.web_qr_canvas.grid(row=0, column=1, padx=4)
+        self._create_stepper_grid(transpose_frame, "Scale", self.params["scale_steps"], self.on_scale_change, col=2)
 
         # --- Show Chords checkbox ---
         ttk.Checkbutton(
@@ -370,9 +375,40 @@ class SongSheetApp(tk.Tk):
             row=0, column=1, sticky="ew", padx=2, ipady=3
         )
 
+        ttk.Separator(f, orient="horizontal").pack(fill="x", pady=(4, 4))
+
+        # --- Web companion URL ---
+        self.web_url_label = ttk.Label(f, text="📱 Web: starting…", cursor="hand2",
+                                       font=("Helvetica", 10), anchor="center")
+        self.web_url_label.pack(fill="x", padx=5, pady=(0, 6))
+
+    def _start_web_server(self):
+        """Start the Flask companion server in a background thread, then update the UI."""
+        import threading
+
+        def _run():
+            try:
+                import qrcode
+                server, ip, port = web_server.start_server(port=5050)
+                url = f"http://{ip}:{port}"
+                qr_img = qrcode.make(url)
+                qr_img = qr_img.resize((80, 80), Image.Resampling.LANCZOS)
+                # Update UI back on the main thread
+                self.after(0, lambda: self._apply_web_server_ui(url, qr_img))
+            except Exception as e:
+                self.after(0, lambda: self.web_url_label.config(text=f"📱 Web: unavailable ({e})"))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _apply_web_server_ui(self, url, qr_img):
+        self.web_url_label.config(text=f"📱 {url}")
+        self.web_url_label.bind("<Button-1>", lambda e: self.clipboard_clear() or self.clipboard_append(url))
+        self._qr_photo = ImageTk.PhotoImage(qr_img)
+        self.web_qr_canvas.create_image(40, 40, image=self._qr_photo, anchor="center")
+
     def _toggle_controls(self, state):
         widget_state = [state] if state == "disabled" else ["!disabled"]
-        always_enabled = {self.set_default_button, self.projector_button, self.pause_button, self.theme_button, self.return_button}
+        always_enabled = {self.set_default_button, self.projector_button, self.pause_button, self.theme_button, self.return_button, self.web_url_label}
 
         def apply(widget):
             for child in widget.winfo_children():
@@ -574,6 +610,8 @@ class SongSheetApp(tk.Tk):
 
         self._display_on_canvas(self.pil_image, self.image_canvas)
         self._update_projector_view()
+        web_server.push_image(self.pil_image, title=self.current_media_name or "",
+                              slide_type="image" if is_static_image else "song")
 
     def _display_on_canvas(self, pil_img, canvas_widget):
         self.after(50, lambda: self._display_on_canvas_after_delay(pil_img, canvas_widget))
